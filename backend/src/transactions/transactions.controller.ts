@@ -3,7 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from 'src/auth/decorator/get-user.decorator';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { User } from '@prisma/client';
+import type { User } from '@prisma/client';
 
 @UseGuards(AuthGuard('jwt')) // Protect all routes in this controller
 @Controller('transactions')
