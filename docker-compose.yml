@@ -3,27 +3,37 @@ version: '3.8'
 services:
   # Backend API Service
   api:
-    build: ./backend # Tells Docker to build the image from the Dockerfile in the ./backend folder
+    build:
+      context: ./backend
     container_name: finance_api
+    # This is the key change for the API service
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npm run start:prod"
     restart: always
     ports:
-      - "3000:3000" # Exposes the API on port 3000 of the VPS
+      - "3000:3000"
     environment:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
-    depends_on:
-      - db # Ensures the database starts before the API
-
+    
   # Database Service
   db:
-    image: postgres:15-alpine # Uses the official PostgreSQL image
+    image: postgres:15-alpine
     container_name: finance_db
     restart: always
+    # This new section tells Docker how to check if Postgres is ready
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Persists database data
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data: # Defines the named volume for data persistence
+  postgres_data:
