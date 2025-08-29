@@ -9,15 +9,19 @@ RUN npm run build
 # Stage 2: Create the production image
 FROM node:18-alpine
 WORKDIR /usr/src/app
-# Only copy necessary production dependencies
-COPY package*.json ./
-RUN npm install --only=production
 
-# Add this line to copy the prisma schema and migrations
+# --- IMPORTANT: The order of the next three blocks has changed ---
+
+# 1. Copy package files
+COPY package*.json ./
+
+# 2. Copy the prisma schema FIRST
 COPY --from=builder /usr/src/app/prisma ./prisma
+
+# 3. THEN run npm install, so `prisma generate` can find the schema
+RUN npm install --only=production
 
 # Copy the built application from the builder stage
 COPY --from=builder /usr/src/app/dist ./dist
 
-# The command from docker-compose.yml will override this, but it's good practice to have it.
 CMD ["node", "dist/main"]
