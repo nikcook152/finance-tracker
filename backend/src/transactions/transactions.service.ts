@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { UpdateTransactionDto } from './dto/update-transaction.dto'; // Import this
 import { User } from '@prisma/client';
 
 @Injectable()
@@ -24,6 +25,36 @@ export class TransactionsService {
         date: new Date(dto.date), // Convert date string to Date object
         userId: user.id,
       },
+    });
+  }
+
+  async updateTransaction(user: User, transactionId: string, dto: UpdateTransactionDto) {
+    // First, find the transaction to make sure it exists and belongs to the user
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction || transaction.userId !== user.id) {
+      throw new ForbiddenException('Access to resource denied');
+    }
+
+    return this.prisma.transaction.update({
+      where: { id: transactionId },
+      data: { ...dto },
+    });
+  }
+
+  async deleteTransaction(user: User, transactionId: string) {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction || transaction.userId !== user.id) {
+      throw new ForbiddenException('Access to resource denied');
+    }
+
+    return this.prisma.transaction.delete({
+      where: { id: transactionId },
     });
   }
 }
