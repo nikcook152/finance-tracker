@@ -1,27 +1,32 @@
 # Stage 1: Build the application
-FROM node:18-alpine AS builder
+# UPDATE: Use Node.js version 20
+FROM node:20-alpine AS builder
 WORKDIR /usr/src/app
+
+# --- IMPORTANT: The order of the next blocks is changed for correctness and caching ---
+
+# 1. Copy package files and prisma schema
 COPY package*.json ./
+COPY prisma ./prisma
+
+# 2. THEN run npm install. This ensures `prisma generate` runs correctly after install.
 RUN npm install
+
+# 3. Copy the rest of the source code
 COPY . .
+
+# 4. Build the application
 RUN npm run build
 
 # Stage 2: Create the production image
-FROM node:18-alpine
+# UPDATE: Use Node.js version 20
+FROM node:20-alpine
 WORKDIR /usr/src/app
 
-# --- IMPORTANT: The order of the next three blocks has changed ---
-
-# 1. Copy package files
 COPY package*.json ./
-
-# 2. Copy the prisma schema FIRST
-COPY --from=builder /usr/src/app/prisma ./prisma
-
-# 3. THEN run npm install, so `prisma generate` can find the schema
+COPY prisma ./prisma
 RUN npm install --only=production
 
-# Copy the built application from the builder stage
 COPY --from=builder /usr/src/app/dist ./dist
 
 CMD ["node", "dist/main"]
