@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  api:
+    build: ./backend # Tells Docker to build the image from the Dockerfile in the ./backend folder
+    container_name: finance_api
+    restart: always
+    ports:
+      - "3000:3000" # Exposes the API on port 3000 of the VPS
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
+    depends_on:
+      - db # Ensures the database starts before the API
+
+  # Database Service
+  db:
+    image: postgres:15-alpine # Uses the official PostgreSQL image
+    container_name: finance_db
+    restart: always
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persists database data
+
+volumes:
+  postgres_data: # Defines the named volume for data persistence
