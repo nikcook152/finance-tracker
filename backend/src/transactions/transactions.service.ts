@@ -29,7 +29,6 @@ export class TransactionsService {
   }
 
   async updateTransaction(user: User, transactionId: string, dto: UpdateTransactionDto) {
-    // First, find the transaction to make sure it exists and belongs to the user
     const transaction = await this.prisma.transaction.findUnique({
       where: { id: transactionId },
     });
@@ -38,9 +37,16 @@ export class TransactionsService {
       throw new ForbiddenException('Access to resource denied');
     }
 
+    const { date, ...restOfDto } = dto;
+    const dataToUpdate: any = { ...restOfDto };
+
+    if (date) {
+      dataToUpdate.date = new Date(date);
+    }
+
     return this.prisma.transaction.update({
       where: { id: transactionId },
-      data: { ...dto },
+      data: dataToUpdate, // Use the corrected data object
     });
   }
 
