@@ -12,6 +12,12 @@ WORKDIR /usr/src/app
 # Only copy necessary production dependencies
 COPY package*.json ./
 RUN npm install --only=production
+
+# Add this line to copy the prisma schema and migrations
+COPY --from=builder /usr/src/app/prisma ./prisma
+
 # Copy the built application from the builder stage
 COPY --from=builder /usr/src/app/dist ./dist
+
+# The command from docker-compose.yml will override this, but it's good practice to have it.
 CMD ["node", "dist/main"]
