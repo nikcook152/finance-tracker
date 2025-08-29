@@ -9,7 +9,7 @@
 
   async function handleRegister() {
     error = '';
-    const response = await fetch(`${env.PUBLIC_API_BASE_URL}/auth/register`, {
+    const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })

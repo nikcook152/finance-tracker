@@ -1,28 +1,46 @@
-version: '3.8'
+# docker-compose.yml
 
 services:
-  # Backend API Service
+  # 1. Nginx Reverse Proxy (The new public entrypoint)
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: finance_nginx
+    restart: always
+    ports:
+      # Expose port 80 to the world
+      - "80:80"
+    volumes:
+      # Mount our custom config file
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api
+      - frontend
+
+  # 2. SvelteKit Frontend Service (New)
+  frontend:
+    build: ./frontend
+    container_name: finance_frontend
+    restart: always
+    # No ports needed; Nginx will talk to it internally
+
+  # 3. NestJS API Service (Modified)
   api:
-    build:
-      context: ./backend
+    build: ./backend
     container_name: finance_api
-    # This is the key change for the API service
+    restart: always
+    # CRITICAL: Remove the ports section!
+    # The API is no longer exposed directly to the internet.
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "npx prisma migrate deploy && npm run start:prod"
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
-    
-  # Database Service
+
+  # 4. Database Service (Unchanged)
   db:
     image: postgres:15-alpine
     container_name: finance_db
     restart: always
-    # This new section tells Docker how to check if Postgres is ready
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
