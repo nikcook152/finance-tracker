@@ -2,8 +2,7 @@
   import { authToken } from '$lib/stores/auth.store';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { env } from '$env/dynamic/public';
-  import { formatCurrency, formatDate } from '$lib/formatters'; // Import our formatters
+  import { formatCurrency, formatDate } from '$lib/formatters';
 
   type Transaction = { id: string; title: string; amount: number; date: string; category: string; type: 'INCOME' | 'EXPENSE'; };
 
@@ -11,20 +10,71 @@
   let isLoading = true;
   let apiError = '';
 
-  // State for the "Add Transaction" form
-  let newTransaction = { title: '', amount: null, date: new Date().toISOString().split('T')[0], category: '', type: 'EXPENSE' as 'INCOME' | 'EXPENSE' };
+  let newTransaction = { title: '', amount: null as number | null, date: new Date().toISOString().split('T')[0], category: '', type: 'EXPENSE' as 'INCOME' | 'EXPENSE' };
 
-  // --- State for the Edit Modal ---
   let isEditing = false;
   let transactionToEdit: Transaction | null = null;
 
-  onMount(async () => { /* ... fetch logic is unchanged ... */ });
-  async function handleAddTransaction() { /* ... unchanged ... */ }
+  // THIS FUNCTION IS NOW FULLY IMPLEMENTED
+  onMount(async () => {
+    const token = $authToken;
+    if (!token) {
+      goto('/login');
+      return;
+    }
 
-  // --- ADD THE FOLLOWING FUNCTIONS ---
+    try {
+      const response = await fetch(`/api/transactions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        transactions = await response.json();
+      } else {
+        apiError = 'Failed to fetch transactions.';
+      }
+    } catch (error) {
+      apiError = 'Could not connect to the server.';
+    } finally {
+      isLoading = false;
+    }
+  });
+
+  // THIS FUNCTION IS NOW FULLY IMPLEMENTED
+  async function handleAddTransaction() {
+    const token = $authToken;
+    if (!token || !newTransaction.amount) return;
+    apiError = '';
+
+    try {
+      const response = await fetch(`/api/transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...newTransaction,
+          amount: Number(newTransaction.amount)
+        })
+      });
+
+      if (response.ok) {
+        const createdTransaction = await response.json();
+        transactions = [...transactions, createdTransaction];
+        newTransaction.title = '';
+        newTransaction.amount = null;
+        newTransaction.category = '';
+      } else {
+        const data = await response.json();
+        apiError = data.message || 'Failed to add transaction.';
+      }
+    } catch (error) {
+      apiError = 'Could not connect to the server.';
+    }
+  }
 
   function openEditModal(transaction: Transaction) {
-    // Create a copy of the transaction to edit, and format date for the input
     transactionToEdit = { ...transaction, date: transaction.date.split('T')[0] };
     isEditing = true;
   }
@@ -42,9 +92,8 @@
 
       if (response.ok) {
         const updatedTransaction = await response.json();
-        // Find and update the transaction in our local list
         transactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
-        isEditing = false; // Close the modal
+        isEditing = false;
         transactionToEdit = null;
       } else {
         apiError = 'Failed to update transaction.';
@@ -65,7 +114,6 @@
       });
 
       if (response.ok) {
-        // Reactively remove the transaction from our list
         transactions = transactions.filter(t => t.id !== transactionId);
       } else {
         apiError = 'Failed to delete transaction.';
@@ -101,18 +149,28 @@
 <div class="card">
   <h2>Add New Transaction</h2>
   <form on:submit|preventDefault={handleAddTransaction} class="add-form">
-    </form>
+    <input type="text" placeholder="Title (e.g., Salary, Groceries)" bind:value={newTransaction.title} required />
+    <input type="number" step="0.01" placeholder="Amount" bind:value={newTransaction.amount} required />
+    <input type="date" bind:value={newTransaction.date} required />
+    <input type="text" placeholder="Category (e.g., Food, Work)" bind:value={newTransaction.category} required />
+    <select bind:value={newTransaction.type} required>
+      <option value="EXPENSE">Expense</option>
+      <option value="INCOME">Income</option>
+    </select>
+    <button type="submit">Add</button>
+  </form>
 </div>
 
 <div class="card">
   <h2>My Transactions</h2>
+  {#if apiError}<p class="error">{apiError}</p>{/if}
   {#if isLoading}
     <p>Loading transactions...</p>
   {:else if transactions.length === 0}
     <p>No transactions yet. Add one using the form above!</p>
   {:else}
     <ul class="transaction-list">
-      {#each transactions.sort((a, b) => new Date(b.date) - new Date(a.date)) as trx (trx.id)}
+      {#each transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) as trx (trx.id)}
         <li>
           <div class="details">
             <span class="title">{trx.title}</span>
@@ -121,8 +179,8 @@
           <div class="amount-actions">
             <span class={trx.type.toLowerCase()}>{formatCurrency(trx.amount)}</span>
             <div class="actions">
-              <button class="icon-btn" on:click={() => openEditModal(trx)}>✏️</button>
-              <button class="icon-btn" on:click={() => handleDelete(trx.id)}>🗑️</button>
+              <button class="icon-btn" title="Edit" on:click={() => openEditModal(trx)}>✏️</button>
+              <button class="icon-btn" title="Delete" on:click={() => handleDelete(trx.id)}>🗑️</button>
             </div>
           </div>
         </li>
@@ -132,7 +190,6 @@
 </div>
 
 <style>
-  /* Add all new and updated styles here */
   .card { background-color: var(--surface-color); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
   h2 { margin-top: 0; }
   .add-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
@@ -148,9 +205,10 @@
   .actions { display: none; }
   li:hover .actions { display: flex; gap: 0.5rem; }
   .icon-btn { background: none; border: none; cursor: pointer; padding: 0.25rem; font-size: 1rem; }
+  .error { color: var(--danger-color); margin-bottom: 1rem; text-align: center; }
 
   /* Modal Styles */
-  .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
+  .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 10; }
   .modal { background-color: white; padding: 2rem; border-radius: 8px; width: 90%; max-width: 500px; }
   .modal form { display: flex; flex-direction: column; gap: 1rem; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem; }
