@@ -1,4 +1,3 @@
-// backend/src/analytics/analytics.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { User } from '@prisma/client';
@@ -8,14 +7,28 @@ export class AnalyticsService {
   constructor(private prisma: PrismaService) {}
 
   async getMonthlyAnalytics(user: User) {
-    // --- For now, we'll use a fixed savings goal. ---
-    // --- In a future step, we'll store this per-user in the database. ---
-    const savingsGoal = 1000;
-
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
+    // Find the most recent savings goal that was active for the current month.
+    const activeGoal = await this.prisma.savingsGoal.findFirst({
+      where: {
+        userId: user.id,
+        createdAt: {
+          // Find goals created on or before the end of this month
+          lte: endOfMonth,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc', // Get the most recent one
+      },
+    });
+
+    // Use the found goal's amount, or default to 0 if none has been set.
+    const savingsGoal = activeGoal?.amount ?? 0;
+
+    // Get all transactions for the current month.
     const transactions = await this.prisma.transaction.findMany({
       where: {
         userId: user.id,
@@ -26,12 +39,13 @@ export class AnalyticsService {
       },
     });
 
+    // Calculate totals.
     const monthlyIncome = transactions
-      .filter(t => t.type === 'INCOME')
+      .filter((t) => t.type === 'INCOME')
       .reduce((sum, t) => sum + t.amount, 0);
 
     const monthlyExpenses = transactions
-      .filter(t => t.type === 'EXPENSE')
+      .filter((t) => t.type === 'EXPENSE')
       .reduce((sum, t) => sum + t.amount, 0);
 
     const currentBudget = monthlyIncome - monthlyExpenses;
@@ -45,8 +59,8 @@ export class AnalyticsService {
       savingsGoal,
       savedAmount,
       hasReachedGoal,
-      // We will calculate fix costs (recurring transactions) in a later step.
-      fixCosts: 0 
+      // We will implement fix costs (recurring transactions) in a later step.
+      fixCosts: 0,
     };
   }
 }

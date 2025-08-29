@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { formatCurrency, formatDate } from '$lib/formatters';
   import AnalyticsSummary from '$lib/components/AnalyticsSummary.svelte';
+  import SavingsGoalManager from '$lib/components/SavingsGoalManager.svelte';
 
   // --- TYPE DEFINITIONS ---
   type Transaction = {
@@ -194,6 +195,10 @@
 
 <div class="card">
   <AnalyticsSummary {analytics} />
+
+  {#if analytics}
+    <SavingsGoalManager currentGoal={analytics.savingsGoal} on:goalUpdated={fetchAnalytics} />
+  {/if}
 </div>
 
 <div class="card">
