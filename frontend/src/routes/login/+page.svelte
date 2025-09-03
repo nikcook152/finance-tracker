@@ -27,7 +27,7 @@
 </script>
 
 <main>
-  <h1>Login new</h1>
+  <h1>Login new2</h1>
   <form on:submit|preventDefault={handleLogin}>
     <label for="email">Email</label>
     <input type="email" id="email" bind:value={email} required />
