@@ -10,6 +10,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    environment: main # Add this line
 
     steps:
       - name: Deploy and Verify
