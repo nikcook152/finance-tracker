@@ -14,4 +14,9 @@ export class AnalyticsController {
   getAnalytics(@GetUser() user: User) {
     return this.analyticsService.getMonthlyAnalytics(user);
   }
+
+  @Get('historical')
+  getHistoricalAnalytics(@GetUser() user: User) {
+    return this.analyticsService.getHistoricalAnalytics(user);
+  }
 }

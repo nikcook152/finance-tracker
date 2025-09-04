@@ -63,4 +63,63 @@ export class AnalyticsService {
       fixCosts: 0,
     };
   }
+
+  async getHistoricalAnalytics(user: User) {
+    const transactions = await this.prisma.transaction.findMany({
+      where: { userId: user.id },
+      orderBy: { date: 'asc' },
+    });
+
+    if (transactions.length === 0) {
+      return [];
+    }
+
+    const monthlyData: { [key: string]: number } = {};
+
+    for (const t of transactions) {
+      const month = t.date.toISOString().slice(0, 7); // YYYY-MM
+      if (!monthlyData[month]) {
+        monthlyData[month] = 0;
+      }
+      if (t.type === 'INCOME') {
+        monthlyData[month] += t.amount;
+      } else {
+        monthlyData[month] -= t.amount;
+      }
+    }
+
+    const oldestTransaction = transactions[0];
+    const oldestDate = new Date(oldestTransaction.date);
+    const currentDate = new Date();
+
+    const historicalData: { month: string; balance: number }[] = [];
+    let cumulativeBalance = 0;
+
+    const startDate = new Date(
+      oldestDate.getFullYear(),
+      oldestDate.getMonth(),
+      1,
+    );
+    const endDate = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0,
+    );
+
+    for (
+      let d = startDate;
+      d <= endDate;
+      d.setMonth(d.getMonth() + 1)
+    ) {
+      const monthKey = d.toISOString().slice(0, 7);
+      const monthlyNet = monthlyData[monthKey] || 0;
+      cumulativeBalance += monthlyNet;
+      historicalData.push({
+        month: monthKey,
+        balance: cumulativeBalance,
+      });
+    }
+
+    return historicalData;
+  }
 }

@@ -8,6 +8,7 @@
     <div class="nav-links">
       {#if $authToken}
         <a href="/dashboard">Dashboard</a>
+        <a href="/analytics">Analytics</a>
         <a href="/login" on:click={() => authToken.set(null)}>Logout</a>
       {:else}
         <a href="/login">Login</a>
