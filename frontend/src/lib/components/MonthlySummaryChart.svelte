@@ -33,8 +33,8 @@
         const data: MonthlySummary[] = await response.json();
         const labels = data.map((d) => d.month);
         const values = data.map((d) => d.net);
-        const backgroundColors = values.map((v) => (v >= 0 ? 'rgba(75, 192, 192, 0.2)' : 'rgba(255, 99, 132, 0.2)'));
-        const borderColors = values.map((v) => (v >= 0 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)'));
+        const backgroundColors = values.map((v) => (v >= 0 ? 'green' : 'red'));
+        const borderColors = values.map((v) => (v >= 0 ? 'green' : 'red'));
 
         const ctx = canvas.getContext('2d');
         if (ctx) {
