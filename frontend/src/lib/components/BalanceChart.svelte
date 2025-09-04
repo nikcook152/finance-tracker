@@ -23,7 +23,7 @@
     }
 
     try {
-      const response = await fetch('http://localhost:3000/analytics/historical', {
+      const response = await fetch('/api/analytics/historical', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
