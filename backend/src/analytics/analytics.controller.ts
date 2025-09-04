@@ -19,4 +19,9 @@ export class AnalyticsController {
   getHistoricalAnalytics(@GetUser() user: User) {
     return this.analyticsService.getHistoricalAnalytics(user);
   }
+
+  @Get('monthly-summary')
+  getMonthlySummary(@GetUser() user: User) {
+    return this.analyticsService.getMonthlySummary(user);
+  }
 }

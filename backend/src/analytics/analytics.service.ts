@@ -64,6 +64,38 @@ export class AnalyticsService {
     };
   }
 
+  async getMonthlySummary(user: User) {
+    const transactions = await this.prisma.transaction.findMany({
+      where: { userId: user.id },
+      orderBy: { date: 'asc' },
+    });
+
+    if (transactions.length === 0) {
+      return [];
+    }
+
+    const monthlySummaries: { [key: string]: { income: number; expense: number } } = {};
+
+    for (const t of transactions) {
+      const month = t.date.toISOString().slice(0, 7); // YYYY-MM
+      if (!monthlySummaries[month]) {
+        monthlySummaries[month] = { income: 0, expense: 0 };
+      }
+      if (t.type === 'INCOME') {
+        monthlySummaries[month].income += t.amount;
+      } else {
+        monthlySummaries[month].expense += t.amount;
+      }
+    }
+
+    const result = Object.keys(monthlySummaries).map((month) => ({
+      month,
+      net: monthlySummaries[month].income - monthlySummaries[month].expense,
+    }));
+
+    return result;
+  }
+
   async getHistoricalAnalytics(user: User) {
     const transactions = await this.prisma.transaction.findMany({
       where: { userId: user.id },
