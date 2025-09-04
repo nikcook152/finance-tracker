@@ -24,4 +24,9 @@ export class AnalyticsController {
   getMonthlySummary(@GetUser() user: User) {
     return this.analyticsService.getMonthlySummary(user);
   }
+
+  @Get('category-expenses')
+  getHistoricalExpensesByCategory(@GetUser() user: User) {
+    return this.analyticsService.getHistoricalExpensesByCategory(user);
+  }
 }

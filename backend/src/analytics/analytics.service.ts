@@ -96,6 +96,54 @@ export class AnalyticsService {
     return result;
   }
 
+  async getHistoricalExpensesByCategory(user: User) {
+    const transactions = await this.prisma.transaction.findMany({
+      where: {
+        userId: user.id,
+        type: 'EXPENSE',
+      },
+      orderBy: {
+        date: 'asc',
+      },
+    });
+
+    if (transactions.length === 0) {
+      return { labels: [], datasets: [] };
+    }
+
+    const expensesByMonthCategory: { [month: string]: { [category: string]: number } } = {};
+    const allCategories = new Set<string>();
+    const allMonths = new Set<string>();
+
+    for (const t of transactions) {
+      const month = t.date.toISOString().slice(0, 7); // YYYY-MM
+      allMonths.add(month);
+      allCategories.add(t.category);
+
+      if (!expensesByMonthCategory[month]) {
+        expensesByMonthCategory[month] = {};
+      }
+      if (!expensesByMonthCategory[month][t.category]) {
+        expensesByMonthCategory[month][t.category] = 0;
+      }
+      expensesByMonthCategory[month][t.category] += t.amount;
+    }
+
+    const sortedMonths = Array.from(allMonths).sort();
+    const datasets = Array.from(allCategories).map((category) => {
+      const data = sortedMonths.map((month) => expensesByMonthCategory[month]?.[category] || 0);
+      return {
+        label: category,
+        data: data,
+      };
+    });
+
+    return {
+      labels: sortedMonths,
+      datasets: datasets,
+    };
+  }
+
   async getHistoricalAnalytics(user: User) {
     const transactions = await this.prisma.transaction.findMany({
       where: { userId: user.id },

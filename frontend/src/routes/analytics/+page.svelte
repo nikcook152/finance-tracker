@@ -1,6 +1,7 @@
 <script lang="ts">
   import BalanceChart from '$lib/components/BalanceChart.svelte';
   import MonthlySummaryChart from '$lib/components/MonthlySummaryChart.svelte';
+  import CategoryExpensesChart from '$lib/components/CategoryExpensesChart.svelte';
 </script>
 
 <div class="container mx-auto p-4">
@@ -9,5 +10,9 @@
   <div class="mt-8">
     <h2 class="text-xl font-bold mb-4">Monthly Summary</h2>
     <MonthlySummaryChart />
+  </div>
+  <div class="mt-8">
+    <h2 class="text-xl font-bold mb-4">Expenses by Category</h2>
+    <CategoryExpensesChart />
   </div>
 </div>
