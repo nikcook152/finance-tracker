@@ -33,8 +33,9 @@
         const data: MonthlySummary[] = await response.json();
         const labels = data.map((d) => d.month);
         const values = data.map((d) => d.net);
-        const backgroundColors = values.map((v) => (v >= 0 ? 'green' : 'red'));
-        const borderColors = values.map((v) => (v >= 0 ? 'green' : 'red'));
+
+        const positiveData = values.map((v) => (v >= 0 ? v : null));
+        const negativeData = values.map((v) => (v < 0 ? v : null));
 
         const ctx = canvas.getContext('2d');
         if (ctx) {
@@ -44,10 +45,17 @@
               labels: labels,
               datasets: [
                 {
-                  label: 'Monthly Net',
-                  data: values,
-                  backgroundColor: backgroundColors,
-                  borderColor: borderColors,
+                  label: 'Surplus',
+                  data: positiveData,
+                  backgroundColor: 'green',
+                  borderColor: 'green',
+                  borderWidth: 1,
+                },
+                {
+                  label: 'Deficit',
+                  data: negativeData,
+                  backgroundColor: 'red',
+                  borderColor: 'red',
                   borderWidth: 1,
                 },
               ],
@@ -56,7 +64,11 @@
               responsive: true,
               maintainAspectRatio: false,
               scales: {
+                x: {
+                  stacked: true,
+                },
                 y: {
+                  stacked: true,
                   beginAtZero: true,
                 },
               },
