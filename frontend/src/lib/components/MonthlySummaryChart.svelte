@@ -82,6 +82,6 @@
   });
 </script>
 
-<div class="relative h-full w-full">
+<div class="relative h-full w-full border-4 border-red-500">
   <canvas bind:this={canvas}></canvas>
 </div>
