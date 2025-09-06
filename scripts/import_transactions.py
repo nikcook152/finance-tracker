@@ -4,14 +4,14 @@ import argparse
 from datetime import datetime
 
 # Define the API endpoint
-API_URL = 'http://localhost/api'
+API_URL = 'http://xxx/api'
 
 def login(username, password):
     """Authenticate and get a JWT token."""
     try:
-        response = requests.post(f'{API_URL}/auth/login', json={'username': username, 'password': password})
+        response = requests.post(f'{API_URL}/auth/login', json={'email': username, 'password': password})
         response.raise_for_status()
-        return response.json().get('access_token')
+        return response.json().get('accessToken')
     except requests.exceptions.RequestException as e:
         print(f"Error during login: {e}")
         return None
@@ -25,18 +25,24 @@ def import_transactions(token, file_path):
     headers = {'Authorization': f'Bearer {token}'}
 
     with open(file_path, 'r', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)
+        reader = csv.DictReader(csvfile, delimiter='\t')
         for row in reader:
             try:
                 # Convert date from DD.MM.YYYY to YYYY-MM-DDTHH:MM:SS.sssZ
                 date_obj = datetime.strptime(row['Date'], '%d.%m.%Y')
                 formatted_date = date_obj.isoformat() + 'Z'
 
+                # Replace comma with a period and remove currency symbols for float conversion
+                amount_str = row['Amount'].replace(',', '.').replace('€', '')
+                
+                # Assign a default category if it's missing
+                category = row['Category'] if row['Category'] else 'Uncategorized'
+
                 transaction_data = {
                     'title': row['Title'],
-                    'amount': float(row['Amount']),
+                    'amount': float(amount_str),
                     'date': formatted_date,
-                    'category': row['Category'],
+                    'category': category,
                     'type': row['Expense/Income'].upper()
                 }
 

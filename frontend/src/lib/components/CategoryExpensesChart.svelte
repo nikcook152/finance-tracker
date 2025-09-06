@@ -79,6 +79,6 @@
   });
 </script>
 
-<div class="relative h-96">
+<div class="relative h-[48rem]">
   <canvas bind:this={canvas}></canvas>
 </div>
