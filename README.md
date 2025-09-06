@@ -6,8 +6,9 @@ A private, self-hostable web application for tracking personal income and expens
 
 * **Transaction Tracking:** Log your income and expenses with titles, amounts, dates, and categories.
 * **Full CRUD History:** View, edit, and delete any transaction from your history.
-* **Monthly Analytics:** Get an instant overview of the current month's income, expenses, and remaining budget.
+* **Analytics Page:** A dedicated page with charts and summaries for balance over time, expenses by category and monthly summaries.
 * **Adjustable Savings Goal:** Set a monthly savings goal and track your progress. The goal is stored historically, so changing it won't affect past analytics.
+* **Data Import:** A script to bulk-import transactions from a CSV file.
 
 ---
 
@@ -87,3 +88,54 @@ To deploy any new changes you've pushed to the repository, simply SSH into your 
 ```bash
 git pull
 docker compose up --build -d
+```
+
+---
+
+## 📥 Data Import
+
+This project includes a Python script to bulk-import transactions from a CSV file. This is useful for migrating from another finance tracking system.
+
+### 1. Prepare Your CSV File
+
+Create a CSV file with the following columns:
+
+*   `Title`: A description of the transaction (e.g., "Groceries", "Salary").
+*   `Amount`: The transaction amount.
+*   `Date`: The date of the transaction in `DD.MM.YYYY` format.
+*   `Category`: The category of the transaction (e.g., "Food", "Work").
+*   `Expense/Income`: Must be either `Expense` or `Income`.
+
+**Example `transactions.csv`:**
+```csv
+Title,Amount,Date,Category,Expense/Income
+"Monthly Salary",3000,01.08.2025,Work,Income
+"Supermarket",75.50,02.08.2025,Food,Expense
+"Internet Bill",50,05.08.2025,Utilities,Expense
+```
+
+### 2. Run the Import Script
+
+The script requires Python 3 and the `requests` library.
+
+1.  **Install Dependencies:**
+    Navigate to the `scripts` directory and install the required library.
+    ```bash
+    cd scripts
+    pip install -r requirements.txt
+    ```
+
+2.  **Execute the Script:**
+    Run the script from within the `scripts` directory, providing your application username, password, and the path to your CSV file.
+
+    > **Note:** The script assumes the application is running and accessible at `http://localhost`. If you are running it from a different machine, you may need to edit the `API_URL` in `import_transactions.py`.
+
+    ```bash
+    python import_transactions.py <your_username> <your_password> <path_to_your_csv_file>
+    ```
+    For example:
+    ```bash
+    python import_transactions.py myuser mypassword ../transactions.csv
+    ```
+
+The script will log you in, and then go through the CSV file row by row to import each transaction.
