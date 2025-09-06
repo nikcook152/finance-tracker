@@ -82,6 +82,6 @@
   });
 </script>
 
-<div class="relative h-[48rem]">
+<div class="relative h-screen">
   <canvas bind:this={canvas}></canvas>
 </div>
