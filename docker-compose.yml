@@ -1,7 +1,60 @@
 # docker-compose.yml
 
 services:
-  # 1. Nginx Reverse Proxy (The new public entrypoint)
+  # 1. NestJS API Service (Updated)
+  api:
+    build: ./backend
+    container_name: finance_api
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    # Construct DATABASE_URL from variables in the .env file
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+
+  # 2. SvelteKit Frontend Service (Cleaned up)
+  frontend:
+    build: ./frontend
+    container_name: finance_frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    networks:
+      - default
+
+  # 3. Database Service (Updated)
+  db:
+    image: postgres:15-alpine
+    container_name: finance_db
+    restart: always
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    # Map the user's variable names to what the postgres image expects
+    environment:
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+      POSTGRES_DB: "${DB_NAME}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Use $$ to escape variables for shell execution inside the container
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+
+  # 4. Nginx Reverse Proxy (Cleaned up)
   nginx:
     image: nginx:1.25-alpine
     container_name: finance_nginx
@@ -16,52 +69,8 @@ services:
       - api
       - frontend
     networks:
-      - default # Das ist das interne Netzwerk deines Stacks
+      - default
       - nginx-proxy # Das ist das neue, gemeinsame Netzwerk
-
-  # 2. SvelteKit Frontend Service (New)
-  frontend:
-    build: ./frontend
-    container_name: finance_frontend
-    restart: always
-    ports:
-      - "5173:5173"
-    networks:
-      - default
-
-  # 3. NestJS API Service (Modified)
-  api:
-    build: ./backend
-    container_name: finance_api
-    restart: always
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - default
-
-  # 4. Database Service (Unchanged)
-  db:
-    image: postgres:15-alpine
-    container_name: finance_db
-    restart: always
-    ports:
-      - "5432:5432"
-    env_file:
-      - .env
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - default
 
 volumes:
   postgres_data:
