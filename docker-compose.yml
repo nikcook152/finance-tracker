@@ -15,6 +15,9 @@ services:
     depends_on:
       - api
       - frontend
+    networks:
+      - default # Das ist das interne Netzwerk deines Stacks
+      - nginx-proxy # Das ist das neue, gemeinsame Netzwerk
 
   # 2. SvelteKit Frontend Service (New)
   frontend:
@@ -57,3 +60,9 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  default: # Definiert das Standard-Netzwerk für diesen Stack
+    driver: bridge
+  nginx-proxy: # Definiert das externe Netzwerk
+    external: true
