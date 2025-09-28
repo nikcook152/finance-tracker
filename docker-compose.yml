@@ -78,5 +78,5 @@ volumes:
 networks:
   default: # Definiert das Standard-Netzwerk für diesen Stack
     driver: bridge
-  nginx-proxy: # Definiert das externe Netzwerk
+  nginx-proxy: # Definiert das externe Netzwerkk
     external: true
