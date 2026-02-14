@@ -26,4 +26,8 @@ RUN npm install --only=production
 # Copy the built application from the builder stage
 COPY --from=builder /usr/src/app/dist ./dist
 
-CMD ["node", "dist/main"]
+# Copy the entrypoint script
+COPY docker-entrypoint.sh /usr/src/app/
+RUN chmod +x /usr/src/app/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/src/app/docker-entrypoint.sh"]
