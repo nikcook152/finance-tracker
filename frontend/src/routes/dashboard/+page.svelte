@@ -1,19 +1,23 @@
 <script lang="ts">
-  import { authToken } from '$lib/stores/auth.store';
+  import { authToken, encryptionKey } from '$lib/stores/auth.store';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { formatCurrency, formatDate } from '$lib/formatters';
+  import { encryptTransaction, decryptTransaction, type EncryptedTransactionData } from '$lib/crypto';
   import AnalyticsSummary from '$lib/components/AnalyticsSummary.svelte';
   import SavingsGoalManager from '$lib/components/SavingsGoalManager.svelte';
 
   // --- TYPE DEFINITIONS ---
   type Transaction = {
     id: string;
-    title: string;
-    amount: number;
+    encryptedData: string;
+    iv: string;
     date: string;
-    category: string;
     type: 'INCOME' | 'EXPENSE';
+    // Decrypted fields (computed client-side)
+    title?: string;
+    amount?: number;
+    category?: string;
   };
 
   type AnalyticsData = {
@@ -43,26 +47,101 @@
   let isEditing = false;
   let transactionToEdit: Transaction | null = null;
 
+  // --- HELPER: Decrypt a single transaction ---
+  async function decryptTransactionData(trx: Transaction, key: CryptoKey): Promise<Transaction> {
+    try {
+      const decrypted = await decryptTransaction(trx.encryptedData, trx.iv, key);
+      return {
+        ...trx,
+        title: decrypted.title,
+        amount: decrypted.amount,
+        category: decrypted.category
+      };
+    } catch (e) {
+      console.error('Failed to decrypt transaction:', trx.id, e);
+      return {
+        ...trx,
+        title: '[Decryption Failed]',
+        amount: 0,
+        category: '[Decryption Failed]'
+      };
+    }
+  }
+
+  // --- HELPER: Calculate analytics client-side ---
+  function calculateAnalytics(decryptedTransactions: Transaction[]): AnalyticsData {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // Filter transactions for current month
+    const monthlyTransactions = decryptedTransactions.filter(t => {
+      const date = new Date(t.date);
+      return date >= startOfMonth && date <= endOfMonth && t.amount !== undefined;
+    });
+
+    const monthlyIncome = monthlyTransactions
+      .filter(t => t.type === 'INCOME')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    const monthlyExpenses = monthlyTransactions
+      .filter(t => t.type === 'EXPENSE')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    const currentBudget = monthlyIncome - monthlyExpenses;
+
+    return {
+      monthlyIncome,
+      monthlyExpenses,
+      currentBudget,
+      savingsGoal: 0, // Will be updated from API
+      savedAmount: currentBudget,
+      hasReachedGoal: currentBudget >= 0,
+      fixCosts: 0
+    };
+  }
+
   // --- DATA FETCHING ---
   onMount(async () => {
     const token = $authToken;
-    if (!token) {
+    const key = $encryptionKey;
+    
+    if (!token || !key) {
       goto('/login');
       return;
     }
 
     isLoading = true;
     try {
-      const [transactionsRes, analyticsRes] = await Promise.all([
-        fetch(`/api/transactions`, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`/api/analytics`, { headers: { 'Authorization': `Bearer ${token}` } })
-      ]);
+      // Fetch transactions
+      const transactionsRes = await fetch(`/api/transactions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-      if (transactionsRes.ok) transactions = await transactionsRes.json();
-      else apiError = 'Failed to fetch transactions.';
+      if (transactionsRes.ok) {
+        const rawTransactions = await transactionsRes.json();
+        // Decrypt all transactions
+        transactions = await Promise.all(
+          rawTransactions.map((t: Transaction) => decryptTransactionData(t, key))
+        );
+        // Calculate analytics client-side
+        analytics = calculateAnalytics(transactions);
+      } else {
+        apiError = 'Failed to fetch transactions.';
+      }
+
+      // Fetch savings goal from API
+      const analyticsRes = await fetch(`/api/analytics`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       
-      if (analyticsRes.ok) analytics = await analyticsRes.json();
-      else apiError = 'Failed to fetch analytics.';
+      if (analyticsRes.ok) {
+        const apiAnalytics = await analyticsRes.json();
+        if (analytics) {
+          analytics.savingsGoal = apiAnalytics.savingsGoal || 0;
+          analytics.hasReachedGoal = analytics.savedAmount >= analytics.savingsGoal;
+        }
+      }
 
     } catch (error) {
       apiError = 'Could not connect to the server.';
@@ -74,10 +153,21 @@
   // --- API FUNCTIONS ---
   async function handleAddTransaction() {
     const token = $authToken;
-    if (!token || !newTransaction.amount) return;
+    const key = $encryptionKey;
+    if (!token || !key || !newTransaction.amount) return;
     apiError = '';
 
     try {
+      // Encrypt the sensitive data
+      const encrypted = await encryptTransaction(
+        {
+          title: newTransaction.title,
+          amount: Number(newTransaction.amount),
+          category: newTransaction.category
+        },
+        key
+      );
+
       const response = await fetch(`/api/transactions`, {
         method: 'POST',
         headers: {
@@ -85,16 +175,20 @@
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          ...newTransaction,
-          amount: Number(newTransaction.amount)
+          encryptedData: encrypted.ciphertext,
+          iv: encrypted.iv,
+          date: newTransaction.date,
+          type: newTransaction.type
         })
       });
 
       if (response.ok) {
         const createdTransaction = await response.json();
-        transactions = [...transactions, createdTransaction];
-        // After adding, refetch analytics to update the summary
-        await fetchAnalytics();
+        // Decrypt the created transaction for display
+        const decryptedTransaction = await decryptTransactionData(createdTransaction, key);
+        transactions = [...transactions, decryptedTransaction];
+        // Recalculate analytics
+        analytics = calculateAnalytics([...transactions]);
         // Reset form
         newTransaction.title = '';
         newTransaction.amount = null;
@@ -109,25 +203,46 @@
   }
 
   function openEditModal(transaction: Transaction) {
-    transactionToEdit = { ...transaction, date: transaction.date.split('T')[0] };
+    transactionToEdit = { 
+      ...transaction, 
+      date: transaction.date.split('T')[0] 
+    };
     isEditing = true;
   }
 
   async function handleUpdateTransaction() {
-    if (!transactionToEdit) return;
+    if (!transactionToEdit || transactionToEdit.amount === undefined) return;
     const token = $authToken;
+    const key = $encryptionKey;
+    if (!token || !key) return;
     
     try {
+      // Encrypt the updated data
+      const encrypted = await encryptTransaction(
+        {
+          title: transactionToEdit.title || '',
+          amount: Number(transactionToEdit.amount),
+          category: transactionToEdit.category || ''
+        },
+        key
+      );
+
       const response = await fetch(`/api/transactions/${transactionToEdit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ ...transactionToEdit, amount: Number(transactionToEdit.amount) })
+        body: JSON.stringify({
+          encryptedData: encrypted.ciphertext,
+          iv: encrypted.iv,
+          date: transactionToEdit.date,
+          type: transactionToEdit.type
+        })
       });
 
       if (response.ok) {
         const updatedTransaction = await response.json();
-        transactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
-        await fetchAnalytics();
+        const decryptedTransaction = await decryptTransactionData(updatedTransaction, key);
+        transactions = transactions.map(t => t.id === updatedTransaction.id ? decryptedTransaction : t);
+        analytics = calculateAnalytics(transactions);
         isEditing = false;
         transactionToEdit = null;
       } else {
@@ -150,7 +265,7 @@
       
       if (response.ok) {
         transactions = transactions.filter(t => t.id !== transactionId);
-        await fetchAnalytics();
+        analytics = calculateAnalytics(transactions);
       } else {
         apiError = 'Failed to delete transaction.';
       }
@@ -160,12 +275,22 @@
   }
 
   async function fetchAnalytics() {
-      const token = $authToken;
-      if (!token) return;
-      const res = await fetch(`/api/analytics`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-          analytics = await res.json();
+    const token = $authToken;
+    const key = $encryptionKey;
+    if (!token || !key) return;
+    
+    // Recalculate analytics from decrypted transactions
+    analytics = calculateAnalytics(transactions);
+    
+    // Fetch savings goal from API
+    const res = await fetch(`/api/analytics`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (res.ok) {
+      const apiAnalytics = await res.json();
+      if (analytics) {
+        analytics.savingsGoal = apiAnalytics.savingsGoal || 0;
+        analytics.hasReachedGoal = analytics.savedAmount >= analytics.savingsGoal;
       }
+    }
   }
 </script>
 
@@ -232,7 +357,7 @@
             <span class="category">{trx.category} - {formatDate(trx.date)}</span>
           </div>
           <div class="amount-actions">
-            <span class={trx.type.toLowerCase()}>{formatCurrency(trx.amount)}</span>
+            <span class={trx.type.toLowerCase()}>{trx.amount !== undefined ? formatCurrency(trx.amount) : '...'}</span>
             <div class="actions">
               <button class="icon-btn" title="Edit" on:click={() => openEditModal(trx)}>✏️</button>
               <button class="icon-btn" title="Delete" on:click={() => handleDelete(trx.id)}>🗑️</button>

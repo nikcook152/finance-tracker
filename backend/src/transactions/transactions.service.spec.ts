@@ -35,8 +35,6 @@ describe('TransactionsService', () => {
         createMockTransaction({ userId: mockUser.id }),
         createMockTransaction({
           id: 'transaction-2',
-          title: 'Salary',
-          amount: 3000,
           type: 'INCOME',
           userId: mockUser.id,
         }),
@@ -67,10 +65,9 @@ describe('TransactionsService', () => {
     it('should create a new transaction successfully', async () => {
       const mockUser = createMockUser();
       const createDto = {
-        title: 'Groceries',
-        amount: 50.0,
+        encryptedData: 'encrypted-payload-base64',
+        iv: 'iv-base64',
         date: '2025-01-15T00:00:00.000Z',
-        category: 'Food',
         type: 'EXPENSE' as const,
       };
 
@@ -86,8 +83,10 @@ describe('TransactionsService', () => {
 
       expect(prismaMock.transaction.create).toHaveBeenCalledWith({
         data: {
-          ...createDto,
+          encryptedData: createDto.encryptedData,
+          iv: createDto.iv,
           date: new Date(createDto.date),
+          type: createDto.type,
           userId: mockUser.id,
         },
       });
@@ -97,10 +96,9 @@ describe('TransactionsService', () => {
     it('should create an INCOME transaction', async () => {
       const mockUser = createMockUser();
       const createDto = {
-        title: 'Salary',
-        amount: 3000.0,
+        encryptedData: 'encrypted-salary-data',
+        iv: 'iv-salary',
         date: '2025-01-01T00:00:00.000Z',
-        category: 'Work',
         type: 'INCOME' as const,
       };
 
@@ -124,8 +122,8 @@ describe('TransactionsService', () => {
       const mockUser = createMockUser();
       const existingTransaction = createMockTransaction({ userId: mockUser.id });
       const updateDto = {
-        title: 'Updated Title',
-        amount: 200.0,
+        encryptedData: 'updated-encrypted-data',
+        iv: 'updated-iv',
       };
 
       const updatedTransaction = {
@@ -146,8 +144,7 @@ describe('TransactionsService', () => {
         where: { id: 'test-transaction-id' },
         data: updateDto,
       });
-      expect(result.title).toBe('Updated Title');
-      expect(result.amount).toBe(200.0);
+      expect(result.encryptedData).toBe('updated-encrypted-data');
     });
 
     it('should update date correctly', async () => {
@@ -181,7 +178,8 @@ describe('TransactionsService', () => {
 
       await expect(
         service.updateTransaction(mockUser as any, 'non-existent-id', {
-          title: 'Test',
+          encryptedData: 'test',
+          iv: 'test',
         }),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -196,7 +194,8 @@ describe('TransactionsService', () => {
 
       await expect(
         service.updateTransaction(mockUser as any, 'test-transaction-id', {
-          title: 'Test',
+          encryptedData: 'test',
+          iv: 'test',
         }),
       ).rejects.toThrow(ForbiddenException);
     });

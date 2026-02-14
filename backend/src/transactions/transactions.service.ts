@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { UpdateTransactionDto } from './dto/update-transaction.dto'; // Import this
+import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { User } from '@prisma/client';
 
 @Injectable()
@@ -21,8 +21,10 @@ export class TransactionsService {
   createTransaction(user: User, dto: CreateTransactionDto) {
     return this.prisma.transaction.create({
       data: {
-        ...dto,
+        encryptedData: dto.encryptedData,
+        iv: dto.iv,
         date: new Date(dto.date), // Convert date string to Date object
+        type: dto.type,
         userId: user.id,
       },
     });
@@ -46,7 +48,7 @@ export class TransactionsService {
 
     return this.prisma.transaction.update({
       where: { id: transactionId },
-      data: dataToUpdate, // Use the corrected data object
+      data: dataToUpdate,
     });
   }
 

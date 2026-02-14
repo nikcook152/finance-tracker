@@ -23,15 +23,16 @@ model User {
 }
 
 // Transaction model for income and expenses
+// Sensitive data (title, amount, category) is stored encrypted in encryptedData
+// date and type are kept unencrypted for sorting/filtering on the server
 model Transaction {
-  id        String          @id @default(cuid())
-  title     String
-  amount    Float
-  date      DateTime
-  category  String
-  type      TransactionType
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id            String          @id @default(cuid())
+  encryptedData String          // AES-GCM encrypted JSON containing { title, amount, category }
+  iv            String          // Initialization vector for decryption
+  date          DateTime        // Kept unencrypted for sorting
+  type          TransactionType // Kept unencrypted for filtering
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   // Relation to User
   user   User   @relation(fields: [userId], references: [id])

@@ -1,3 +1,26 @@
+"""
+Transaction Import Script for Finance Tracker
+
+⚠️  IMPORTANT: E2E Encryption Compatibility Notice ⚠️
+
+This import script is NOT compatible with the E2E encryption feature.
+With E2E encryption enabled, transaction data (title, amount, category) must be 
+encrypted client-side before being sent to the API.
+
+Options for importing transactions:
+1. Use the web interface (recommended) - encryption is handled automatically
+2. Temporarily disable encryption in your local development environment
+3. Implement encryption in Python using the cryptography library with the same 
+   parameters as the frontend (PBKDF2 with 100,000 iterations, AES-GCM)
+
+If you need bulk import, consider:
+- Creating a temporary bypass endpoint (development only)
+- Using the frontend's add transaction form
+- Exporting from your old system and manually entering transactions
+
+See README.md for more details on the E2E encryption implementation.
+"""
+
 import csv
 import requests
 import argparse
@@ -17,7 +40,22 @@ def login(username, password):
         return None
 
 def import_transactions(token, file_path):
-    """Import transactions from a CSV file."""
+    """
+    Import transactions from a CSV file.
+    
+    NOTE: This function is provided for reference but will NOT work with E2E encryption.
+    The backend expects 'encryptedData' and 'iv' fields instead of 'title', 'amount', 'category'.
+    """
+    print("=" * 60)
+    print("⚠️  WARNING: E2E Encryption Incompatible")
+    print("=" * 60)
+    print("This script cannot import transactions with E2E encryption enabled.")
+    print("Transaction data must be encrypted client-side before sending to API.")
+    print("Please use the web interface to add transactions manually.")
+    print("=" * 60)
+    return
+
+    # Original code below (kept for reference, will not execute)
     if not token:
         print("Authentication token is missing. Cannot proceed.")
         return
@@ -38,6 +76,8 @@ def import_transactions(token, file_path):
                 # Assign a default category if it's missing
                 category = row['Category'] if row['Category'] else 'Uncategorized'
 
+                # NOTE: This format is NOT compatible with E2E encryption
+                # The API expects: { encryptedData: string, iv: string, date: string, type: string }
                 transaction_data = {
                     'title': row['Title'],
                     'amount': float(amount_str),

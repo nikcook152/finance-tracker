@@ -1,36 +1,78 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Chart, registerables } from 'chart.js';
-  import { authToken } from '$lib/stores/auth.store';
+  import { authToken, encryptionKey } from '$lib/stores/auth.store';
+  import { decryptTransaction } from '$lib/crypto';
   import { browser } from '$app/environment';
+  import { goto } from '$app/navigation';
 
   Chart.register(...registerables);
 
   let chart: Chart;
   let canvas: HTMLCanvasElement;
 
-  type MonthlySummary = {
-    month: string;
-    net: number;
+  type Transaction = {
+    id: string;
+    encryptedData: string;
+    iv: string;
+    date: string;
+    type: 'INCOME' | 'EXPENSE';
   };
 
   onMount(async () => {
     if (!browser) return;
 
     const token = $authToken;
-    if (!token) {
+    const key = $encryptionKey;
+    if (!token || !key) {
+      goto('/login');
       return;
     }
 
     try {
-      const response = await fetch('/api/analytics/monthly-summary', {
+      // Fetch all transactions
+      const response = await fetch('/api/transactions', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
       if (response.ok) {
-        const data: MonthlySummary[] = await response.json();
+        const transactions: Transaction[] = await response.json();
+        
+        // Decrypt all transactions
+        const decryptedTransactions = await Promise.all(
+          transactions.map(async (t) => {
+            try {
+              const decrypted = await decryptTransaction(t.encryptedData, t.iv, key);
+              return { ...t, amount: decrypted.amount };
+            } catch {
+              return { ...t, amount: 0 };
+            }
+          })
+        );
+
+        // Calculate monthly summary
+        const monthlyData: { [month: string]: { income: number; expense: number } } = {};
+        
+        for (const t of decryptedTransactions) {
+          const month = t.date.slice(0, 7); // YYYY-MM
+          if (!monthlyData[month]) {
+            monthlyData[month] = { income: 0, expense: 0 };
+          }
+          if (t.type === 'INCOME') {
+            monthlyData[month].income += t.amount || 0;
+          } else {
+            monthlyData[month].expense += t.amount || 0;
+          }
+        }
+
+        const months = Object.keys(monthlyData).sort();
+        const data = months.map((month) => ({
+          month,
+          net: monthlyData[month].income - monthlyData[month].expense,
+        }));
+
         const labels = data.map((d) => d.month);
         const values = data.map((d) => d.net);
 

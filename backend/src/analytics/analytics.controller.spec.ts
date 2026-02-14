@@ -7,9 +7,6 @@ describe('AnalyticsController', () => {
 
   const mockAnalyticsService = {
     getMonthlyAnalytics: jest.fn(),
-    getHistoricalAnalytics: jest.fn(),
-    getMonthlySummary: jest.fn(),
-    getHistoricalExpensesByCategory: jest.fn(),
   };
 
   beforeEach(async () => {

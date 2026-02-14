@@ -119,17 +119,15 @@ describe('Finance Tracker API (e2e)', () => {
           .post('/transactions')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            title: 'Groceries',
-            amount: 50.0,
+            encryptedData: 'encrypted-groceries-data-base64',
+            iv: 'iv-groceries-base64',
             date: '2025-01-15T00:00:00.000Z',
-            category: 'Food',
             type: 'EXPENSE',
           })
           .expect(201);
 
-        expect(response.body.title).toBe('Groceries');
-        expect(response.body.amount).toBe(50);
-        expect(response.body.category).toBe('Food');
+        expect(response.body.encryptedData).toBe('encrypted-groceries-data-base64');
+        expect(response.body.iv).toBe('iv-groceries-base64');
         expect(response.body.type).toBe('EXPENSE');
         transactionId = response.body.id;
       });
@@ -139,10 +137,9 @@ describe('Finance Tracker API (e2e)', () => {
           .post('/transactions')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            title: 'Salary',
-            amount: 3000.0,
+            encryptedData: 'encrypted-salary-data-base64',
+            iv: 'iv-salary-base64',
             date: '2025-01-01T00:00:00.000Z',
-            category: 'Work',
             type: 'INCOME',
           })
           .expect(201);
@@ -154,10 +151,9 @@ describe('Finance Tracker API (e2e)', () => {
         await request(app.getHttpServer())
           .post('/transactions')
           .send({
-            title: 'Test',
-            amount: 100,
+            encryptedData: 'test-data',
+            iv: 'test-iv',
             date: '2025-01-15T00:00:00.000Z',
-            category: 'Test',
             type: 'EXPENSE',
           })
           .expect(401);
@@ -168,10 +164,9 @@ describe('Finance Tracker API (e2e)', () => {
           .post('/transactions')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            title: 'Test',
-            amount: 100,
+            encryptedData: 'test-data',
+            iv: 'test-iv',
             date: '2025-01-15T00:00:00.000Z',
-            category: 'Test',
             type: 'INVALID_TYPE',
           })
           .expect(400);
@@ -187,6 +182,9 @@ describe('Finance Tracker API (e2e)', () => {
 
         expect(Array.isArray(response.body)).toBe(true);
         expect(response.body.length).toBeGreaterThanOrEqual(2);
+        // Verify transactions have encrypted data
+        expect(response.body[0]).toHaveProperty('encryptedData');
+        expect(response.body[0]).toHaveProperty('iv');
       });
 
       it('should reject unauthenticated requests', async () => {
@@ -202,20 +200,20 @@ describe('Finance Tracker API (e2e)', () => {
           .patch(`/transactions/${transactionId}`)
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            title: 'Updated Groceries',
-            amount: 75.0,
+            encryptedData: 'updated-encrypted-data-base64',
+            iv: 'updated-iv-base64',
           })
           .expect(200);
 
-        expect(response.body.title).toBe('Updated Groceries');
-        expect(response.body.amount).toBe(75);
+        expect(response.body.encryptedData).toBe('updated-encrypted-data-base64');
+        expect(response.body.iv).toBe('updated-iv-base64');
       });
 
       it('should reject update of non-existent transaction', async () => {
         await request(app.getHttpServer())
           .patch('/transactions/non-existent-id')
           .set('Authorization', `Bearer ${authToken}`)
-          .send({ title: 'Test' })
+          .send({ encryptedData: 'test', iv: 'test' })
           .expect(403);
       });
     });
@@ -244,40 +242,13 @@ describe('Finance Tracker API (e2e)', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
+      // With E2E encryption, analytics returns savings goal and zeros for computed fields
       expect(response.body).toHaveProperty('monthlyIncome');
       expect(response.body).toHaveProperty('monthlyExpenses');
       expect(response.body).toHaveProperty('currentBudget');
       expect(response.body).toHaveProperty('savingsGoal');
       expect(response.body).toHaveProperty('savedAmount');
       expect(response.body).toHaveProperty('hasReachedGoal');
-    });
-
-    it('should return historical analytics', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/analytics/historical')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(Array.isArray(response.body)).toBe(true);
-    });
-
-    it('should return monthly summary', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/analytics/monthly-summary')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(Array.isArray(response.body)).toBe(true);
-    });
-
-    it('should return category expenses', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/analytics/category-expenses')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(response.body).toHaveProperty('labels');
-      expect(response.body).toHaveProperty('datasets');
     });
 
     it('should reject unauthenticated requests', async () => {

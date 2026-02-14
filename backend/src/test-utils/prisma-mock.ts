@@ -18,10 +18,9 @@ export const createMockUser = (overrides = {}) => ({
 
 export const createMockTransaction = (overrides = {}) => ({
   id: 'test-transaction-id',
-  title: 'Test Transaction',
-  amount: 100.0,
+  encryptedData: 'encrypted-data-base64', // Encrypted JSON containing { title, amount, category }
+  iv: 'initialization-vector-base64', // IV for decryption
   date: new Date('2025-01-15'),
-  category: 'Food',
   type: 'EXPENSE' as const,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2025-01-01'),

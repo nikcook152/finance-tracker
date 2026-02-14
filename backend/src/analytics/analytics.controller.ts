@@ -10,23 +10,13 @@ import { AnalyticsService } from './analytics.service';
 export class AnalyticsController {
   constructor(private analyticsService: AnalyticsService) {}
 
+  /**
+   * Get savings goal for the user.
+   * Note: With E2E encryption, analytics are computed client-side.
+   * This endpoint only returns the savings goal.
+   */
   @Get()
   getAnalytics(@GetUser() user: User) {
     return this.analyticsService.getMonthlyAnalytics(user);
-  }
-
-  @Get('historical')
-  getHistoricalAnalytics(@GetUser() user: User) {
-    return this.analyticsService.getHistoricalAnalytics(user);
-  }
-
-  @Get('monthly-summary')
-  getMonthlySummary(@GetUser() user: User) {
-    return this.analyticsService.getMonthlySummary(user);
-  }
-
-  @Get('category-expenses')
-  getHistoricalExpensesByCategory(@GetUser() user: User) {
-    return this.analyticsService.getHistoricalExpensesByCategory(user);
   }
 }
