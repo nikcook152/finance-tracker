@@ -12,6 +12,184 @@ A private, self-hostable web application for tracking personal income and expens
 
 ---
 
+## 🏗️ Architecture Overview
+
+### System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Internet                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Nginx Reverse Proxy                                  │
+│                         (Port 8090 external)                                 │
+│                                                                              │
+│   ┌─────────────────────┐         ┌─────────────────────┐                   │
+│   │   /api/* routes     │         │   /* routes         │                   │
+│   │   → backend:3000    │         │   → frontend:3000   │                   │
+│   └─────────────────────┘         └─────────────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                         │                              │
+                         ▼                              ▼
+┌────────────────────────────────────┐   ┌────────────────────────────────────┐
+│      Backend API (NestJS)          │   │      Frontend (SvelteKit)          │
+│      Internal Port: 3000           │   │      Internal Port: 3000           │
+│                                    │   │                                    │
+│  ┌──────────────────────────────┐  │   │  ┌──────────────────────────────┐  │
+│  │     Authentication Module    │  │   │  │     Svelte Components        │  │
+│  │     - JWT Strategy           │  │   │  │     - Dashboard              │  │
+│  │     - HttpOnly Cookies       │  │   │  │     - Analytics              │  │
+│  │     - Account Lockout        │  │   │  │     - Login/Register         │  │
+│  └──────────────────────────────┘  │   │  └──────────────────────────────┘  │
+│                                    │   │                                    │
+│  ┌──────────────────────────────┐  │   │  ┌──────────────────────────────┐  │
+│  │     Transactions Module      │  │   │  │     Crypto Layer             │  │
+│  │     - CRUD Operations        │  │   │  │     - PBKDF2 Key Derivation  │  │
+│  │     - User Ownership         │  │   │  │     - AES-GCM Encryption     │  │
+│  └──────────────────────────────┘  │   │  │     - Local Salt Storage     │  │
+│                                    │   │  └──────────────────────────────┘  │
+│  ┌──────────────────────────────┐  │   │                                    │
+│  │     Analytics Module         │  │   │  ┌──────────────────────────────┐  │
+│  │     - Savings Goals          │  │   │  │     Auth Store               │  │
+│  │     - Historical Data        │  │   │  │     - Session State          │  │
+│  └──────────────────────────────┘  │   │  │     - Encryption Key (mem)   │  │
+│                                    │   │  └──────────────────────────────┘  │
+│  ┌──────────────────────────────┐  │   │                                    │
+│  │     Prisma ORM               │  │   └────────────────────────────────────┘
+│  │     - Type-safe Queries      │  │   
+│  │     - Connection Pooling     │  │   
+│  └──────────────────────────────┘  │   
+└────────────────────────────────────┘   
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PostgreSQL Database                                     │
+│                      Internal Port: 5432                                     │
+│                                                                              │
+│   ┌───────────────┐  ┌───────────────┐  ┌───────────────┐                   │
+│   │    Users      │  │ Transactions  │  │ SavingsGoals  │                   │
+│   │ - id          │  │ - id          │  │ - id          │                   │
+│   │ - email       │  │ - encryptedData│  │ - amount      │                   │
+│   │ - passwordHash│  │ - iv          │  │ - userId      │                   │
+│   │ - failedLogin │  │ - date        │  │ - createdAt   │                   │
+│   │ - lockedUntil │  │ - type        │  └───────────────┘                   │
+│   └───────────────┘  │ - userId      │                                        │
+│                      └───────────────┘                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Request Flow
+
+#### 1. User Authentication Flow
+```
+User Browser                    Frontend                     Backend                    Database
+    │                              │                           │                          │
+    │─── Enter Credentials ───────▶│                           │                          │
+    │                              │                           │                          │
+    │                              │─── Derive encryption key ─▶│                          │
+    │                              │    (PBKDF2 + salt)        │                          │
+    │                              │                           │                          │
+    │                              │─── POST /api/auth/login ─▶│                          │
+    │                              │    (email, password)      │                          │
+    │                              │                           │─── Validate user ───────▶│
+    │                              │                           │─── Check lockout ───────▶│
+    │                              │                           │─── Verify password ─────▶│
+    │                              │                           │                          │
+    │◀──── Set-Cookie: access_token ──────────────────────────│                          │
+    │◀──── Set-Cookie: refresh_token ─────────────────────────│                          │
+    │                              │                           │                          │
+    │                              │◀── Store key in memory ───│                          │
+```
+
+#### 2. Transaction Creation Flow (E2E Encryption)
+```
+User Browser                    Frontend                     Backend                    Database
+    │                              │                           │                          │
+    │─── Enter transaction ───────▶│                           │                          │
+    │    (title, amount, category) │                           │                          │
+    │                              │                           │                          │
+    │                              │─── Encrypt data ──────────▶│                          │
+    │                              │    AES-GCM with user key  │                          │
+    │                              │    → ciphertext + iv      │                          │
+    │                              │                           │                          │
+    │                              │─── POST /api/transactions ─▶│                         │
+    │                              │    {encryptedData, iv,    │                          │
+    │                              │     date, type}           │                          │
+    │                              │                           │─── Store encrypted ─────▶│
+    │                              │                           │                          │
+    │◀────── Success response ─────────────────────────────────│                          │
+```
+
+#### 3. Transaction Retrieval Flow
+```
+User Browser                    Frontend                     Backend                    Database
+    │                              │                           │                          │
+    │─── View dashboard ──────────▶│                           │                          │
+    │                              │                           │                          │
+    │                              │─── GET /api/transactions ─▶│                          │
+    │                              │    Cookie: access_token   │                          │
+    │                              │                           │─── Validate JWT ────────▶│
+    │                              │                           │─── Fetch transactions ──▶│
+    │                              │                           │                          │
+    │                              │◀── Return encrypted data ──│                          │
+    │                              │    [{encryptedData, iv,   │                          │
+    │                              │      date, type}, ...]    │                          │
+    │                              │                           │                          │
+    │                              │─── Decrypt each record ───▶│                          │
+    │                              │    using memory key       │                          │
+    │                              │                           │                          │
+    │◀─── Display decrypted data ──│                           │                          │
+    │    (title, amount, category) │                           │                          │
+```
+
+### Docker Network Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Docker Default Network                                │
+│                     (finance-tracker_default)                                │
+│                                                                              │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│   │   nginx     │    │   frontend  │    │    api      │    │     db      │  │
+│   │  Port 8090  │    │  Port 3000  │    │  Port 3000  │    │  Port 5432  │  │
+│   │  (external) │    │ (internal)  │    │ (internal)  │    │ (internal)  │  │
+│   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘  │
+│          │                  │                  │                  │         │
+│          │                  │                  │                  │         │
+│          └──────────────────┼──────────────────┼──────────────────┘         │
+│                             │                  │                            │
+│                    ┌────────┴────────┐  ┌──────┴──────┐                     │
+│                    │  HTTP traffic   │  │  Prisma     │                     │
+│                    │  (reverse proxy)│  │  queries    │                     │
+│                    └─────────────────┘  └─────────────┘                     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          │ (optional)
+                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     External Nginx Proxy Network                             │
+│                     (nginx-proxy)                                            │
+│                                                                              │
+│   Used for integration with external reverse proxy / SSL termination        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Architectural Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Nginx as single entry point** | All traffic goes through Nginx, enabling unified security headers, logging, and SSL termination |
+| **No exposed database port** | Database is only accessible from the API container via internal Docker network |
+| **Client-side encryption** | Server never sees plaintext financial data; encryption key never leaves browser |
+| **HttpOnly cookies for JWT** | Prevents XSS-based token theft; cookies are not accessible to JavaScript |
+| **Non-root containers** | Limits impact of potential container escape vulnerabilities |
+| **Separate access/refresh tokens** | Short-lived access tokens (15min) reduce exposure if compromised; refresh tokens enable seamless UX |
+
+---
+
 ## 🔒 Security Model
 
 ### End-to-End Encryption
