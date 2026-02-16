@@ -8,22 +8,113 @@ A private, self-hostable web application for tracking personal income and expens
 * **Full CRUD History:** View, edit, and delete any transaction from your history.
 * **Analytics Page:** A dedicated page with charts and summaries for balance over time, expenses by category and monthly summaries.
 * **Adjustable Savings Goal:** Set a monthly savings goal and track your progress. The goal is stored historically, so changing it won't affect past analytics.
-* **Data Import:** A script to bulk-import transactions from a CSV file.
+* **End-to-End Encryption:** All sensitive transaction data is encrypted client-side before being sent to the server.
 
 ---
 
-## 🔒 Security Model: End-to-End Encryption
+## 🔒 Security Model
+
+### End-to-End Encryption
 
 The core security feature of this application is that **your sensitive financial data is never stored in a readable format on the server**. All encryption and decryption happen exclusively in your browser.
 
-Here's how it works:
-1.  **Master Password:** When you register, your password becomes your master key. It is **never** sent to the server.
-2.  **Key Derivation:** In your browser, a strong encryption key is derived from your master password using a secure algorithm. This key never leaves your device.
-3.  **Client-Side Encryption:** Before a transaction is saved, all sensitive details (like the title and amount) are encrypted in your browser using this key.
-4.  **Secure Storage:** The server receives and stores only this encrypted "blob" of data. It has no way of reading what's inside.
-5.  **Client-Side Decryption:** When you log in and view your data, the encrypted blobs are sent back to your browser, where they are decrypted locally for you to see.
+#### How It Works
+
+1. **Master Password:** When you register or log in, your password becomes your master key. It is **never sent to the server** in plain text - only used locally for key derivation.
+
+2. **Key Derivation (PBKDF2):** In your browser, a strong 256-bit AES encryption key is derived from your master password using PBKDF2 (Password-Based Key Derivation Function 2) with:
+   - 100,000 iterations for computational resistance against brute-force attacks
+   - SHA-256 as the hash function
+   - A cryptographically random 128-bit salt (stored in localStorage per user account)
+
+3. **Client-Side Encryption (AES-GCM):** Before a transaction is saved, all sensitive details (title, amount, category) are:
+   - Serialized to JSON
+   - Encrypted using AES-GCM (Advanced Encryption Standard in Galois/Counter Mode)
+   - A unique 96-bit initialization vector (IV) is generated for each encryption operation
+
+4. **Secure Storage:** The server receives and stores only:
+   - `encryptedData`: The AES-GCM encrypted blob containing `{title, amount, category}`
+   - `iv`: The initialization vector (needed for decryption, but useless without the key)
+   - `date`: Kept unencrypted for server-side sorting
+   - `type`: Kept unencrypted (INCOME/EXPENSE) for server-side filtering
+
+5. **Client-Side Decryption:** When you view your data, the encrypted blobs are sent to your browser, where they are decrypted locally using your derived key.
+
+#### What's Encrypted vs. Unencrypted
+
+| Field | Encrypted | Reason |
+|-------|-----------|--------|
+| Title | ✅ Yes | Sensitive financial description |
+| Amount | ✅ Yes | Sensitive financial value |
+| Category | ✅ Yes | Sensitive spending patterns |
+| Date | ❌ No | Needed for server-side sorting/filtering |
+| Type (Income/Expense) | ❌ No | Needed for server-side filtering |
 
 This model ensures that neither the hosting provider, nor a database administrator, nor any third party can ever access your personal financial details.
+
+---
+
+### Authentication & Session Management
+
+#### HttpOnly Cookie-Based Authentication
+
+JWT tokens are stored in **HttpOnly cookies**, not localStorage. This provides protection against:
+- **XSS (Cross-Site Scripting)** attacks that could steal tokens
+- **JavaScript-based token theft** since cookies are not accessible to client-side scripts
+
+#### Token Strategy
+
+| Token Type | Lifetime | Purpose |
+|------------|----------|---------|
+| Access Token | 15 minutes | API authentication |
+| Refresh Token | 7 days | Obtain new access tokens |
+
+The short-lived access token minimizes the window of opportunity if a token is somehow compromised. The refresh token allows seamless re-authentication without requiring the user to log in again.
+
+#### Account Lockout Protection
+
+After 5 consecutive failed login attempts, the account is temporarily locked for 30 minutes. This protects against:
+- Brute-force password attacks
+- Credential stuffing attacks
+- Targeted account takeover attempts
+
+---
+
+### Infrastructure Security
+
+#### Network Isolation
+
+All services run in an isolated Docker network. **No ports are exposed to the public internet:**
+
+| Service | External Access | Internal Access |
+|---------|-----------------|-----------------|
+| Frontend (SvelteKit) | ❌ No | Via Nginx reverse proxy |
+| Backend API (NestJS) | ❌ No | Via Nginx reverse proxy |
+| Database (PostgreSQL) | ❌ No | API container only |
+| Nginx | ✅ Yes (port 8090) | Reverse proxy to frontend/backend |
+
+#### Non-Root Containers
+
+Both frontend and backend Docker containers run as a non-root user (`app`). This limits the potential impact of a container escape vulnerability.
+
+#### Security Headers
+
+The application sets multiple security headers via:
+- **Helmet middleware** in the NestJS backend
+- **Nginx configuration** for additional headers
+
+Headers include:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+
+#### Input Validation
+
+All user inputs are validated using `class-validator` decorators:
+- Email validation with proper format checking
+- Password minimum length of 8 characters
+- Request payload validation via NestJS ValidationPipe
 
 ---
 
@@ -31,13 +122,27 @@ This model ensures that neither the hosting provider, nor a database administrat
 
 This project is built with a modern, reliable, and open-source stack.
 
-* **Frontend:** **SvelteKit** & **TypeScript** for a fast, reactive, and type-safe user interface.
-* **Backend:** **NestJS** & **TypeScript** for a robust and scalable API structure.
-* **Database:** **PostgreSQL** for reliable and powerful data storage.
-* **ORM:** **Prisma** for type-safe database access and easy migrations.
-* **Deployment & Infrastructure:**
-    * **Docker & Docker Compose:** The entire application is containerized for portability and simple, repeatable deployments.
-    * **Nginx:** Used as a high-performance reverse proxy to manage traffic to the frontend and backend services.
+### Frontend
+- **SvelteKit** - Fast, reactive framework with server-side rendering
+- **TypeScript** - Type-safe development
+- **Web Crypto API** - Native browser cryptography (no external dependencies)
+
+### Backend
+- **NestJS** - Robust, modular Node.js framework
+- **TypeScript** - Type-safe development
+- **Prisma** - Type-safe ORM with migration support
+- **bcrypt** - Secure password hashing
+- **JWT** - JSON Web Tokens for authentication
+- **Helmet** - Security headers middleware
+- **class-validator** - Request validation
+
+### Database
+- **PostgreSQL** - Reliable, ACID-compliant relational database
+
+### Infrastructure
+- **Docker & Docker Compose** - Containerized deployment
+- **Nginx** - High-performance reverse proxy
+- **Alpine Linux** - Minimal container images for reduced attack surface
 
 ---
 
@@ -47,95 +152,156 @@ The entire application is designed to be deployed on a single VPS with Docker an
 
 ### Prerequisites
 
-* A Linux VPS (e.g., from IONOS, DigitalOcean, etc.).
-* **Docker** and **Docker Compose** installed on the VPS.
-* **Git** installed on the VPS.
-* A firewall (like `ufw`) configured.
+* A Linux VPS (e.g., from IONOS, DigitalOcean, etc.)
+* **Docker** and **Docker Compose** installed on the VPS
+* **Git** installed on the VPS
+* A firewall (like `ufw`) configured
 
 ### Step-by-Step Guide
 
-1.  **Clone the Repository**
-    SSH into your VPS and clone this repository.
-    ```bash
-    git clone https://github.com/nikcook152/finance-tracker.git
-    cd finance-tracker
-    ```
+1. **Clone the Repository**
+   SSH into your VPS and clone this repository.
+   ```bash
+   git clone https://github.com/nikcook152/finance-tracker.git
+   cd finance-tracker
+   ```
 
-2.  **Create Environment File**
-    Create a `.env` file in the root of the project. You can copy the example file to get started.
-    ```bash
-    cp .env.example .env
-    ```
-    Now, edit the `.env` file and fill in your desired database credentials. **Use a strong, unique password for `DB_PASSWORD`**.
+2. **Create Environment File**
+   Create a `.env` file in the root of the project. You can copy the example file to get started.
+   ```bash
+   cp env.example .env
+   ```
+   
+   Now, edit the `.env` file with your configuration:
+   ```bash
+   # Database Credentials
+   DB_USER=your_db_user
+   DB_PASSWORD=your_secure_password  # Use a strong, unique password!
+   DB_NAME=finance_tracker
+   
+   # JWT Secret Key (generate a secure random string)
+   # Example: openssl rand -base64 32
+   JWT_SECRET=your_256_bit_random_secret_key
+   
+   # CORS Allowed Origins (comma-separated)
+   CORS_ORIGIN=https://yourdomain.com
+   ```
 
-3.  **Open Firewall Port**
-    Allow incoming web traffic on the standard HTTP port.
-    ```bash
-    sudo ufw allow 80
-    ```
+3. **Open Firewall Port**
+   Allow incoming web traffic on the configured port.
+   ```bash
+   sudo ufw allow 8090
+   ```
 
-4.  **Build and Launch**
-    Run the following command from the project root. This will build the frontend and backend images, start all containers, and apply any pending database migrations automatically.
-    ```bash
-    docker compose up --build -d
-    ```
+4. **Build and Launch**
+   Run the following command from the project root. This will build the frontend and backend images, start all containers, and apply any pending database migrations automatically.
+   ```bash
+   docker compose up --build -d
+   ```
 
-Your application is now live! You can access it by navigating to `http://<your_vps_ip>` in your web browser.
+Your application is now live! You can access it by navigating to `http://<your_vps_ip>:8090` in your web browser.
 
 ### Future Deployments
 
-To deploy any new changes you've pushed to the repository, simply SSH into your VPS, pull the latest code, and run the same command again:
+To deploy any new changes you've pushed to the repository:
 ```bash
 git pull
 docker compose up --build -d
 ```
 
+### HTTPS Configuration (Recommended for Production)
+
+The Nginx configuration includes a prepared HTTPS server block (commented out). To enable HTTPS:
+
+1. Obtain SSL certificates (e.g., using Let's Encrypt/Certbot)
+2. Mount the certificates into the Nginx container
+3. Uncomment the HTTPS server block in `nginx/nginx.conf`
+4. Update the CORS origin to use `https://`
+
 ---
 
 ## 📥 Data Import
 
-This project includes a Python script to bulk-import transactions from a CSV file. This is useful for migrating from another finance tracking system.
+> ⚠️ **Important:** The data import script is **not compatible with E2E encryption**. With encryption enabled, transaction data must be encrypted client-side before being sent to the API.
 
-### 1. Prepare Your CSV File
+### Options for Importing Transactions
 
-Create a CSV file with the following columns:
+1. **Use the Web Interface (Recommended)** - Encryption is handled automatically
+2. **Manual Entry** - Add transactions through the dashboard form
+3. **Modify the Import Script** - Implement Python encryption using the same parameters (PBKDF2, AES-GCM)
 
-*   `Title`: A description of the transaction (e.g., "Groceries", "Salary").
-*   `Amount`: The transaction amount.
-*   `Date`: The date of the transaction in `DD.MM.YYYY` format.
-*   `Category`: The category of the transaction (e.g., "Food", "Work").
-*   `Expense/Income`: Must be either `Expense` or `Income`.
+For reference, the import script is located in `scripts/import_transactions.py` and supports:
+- Environment variable configuration (`FINANCE_API_URL`, `FINANCE_USERNAME`, `FINANCE_PASSWORD`)
+- Interactive credential prompts
+- CSV file parsing
 
-**Example `transactions.csv`:**
-```csv
-Title,Amount,Date,Category,Expense/Income
-"Monthly Salary",3000,01.08.2025,Work,Income
-"Supermarket",75.50,02.08.2025,Food,Expense
-"Internet Bill",50,05.08.2025,Utilities,Expense
+---
+
+## 🔧 Local Development
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 15+
+- npm or yarn
+
+### Backend Setup
+
+```bash
+cd backend
+npm install
+cp .env.example .env  # Configure your database connection
+npx prisma generate
+npx prisma migrate dev
+npm run start:dev
 ```
 
-### 2. Run the Import Script
+### Frontend Setup
 
-The script requires Python 3 and the `requests` library.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-1.  **Install Dependencies:**
-    Navigate to the `scripts` directory and install the required library.
-    ```bash
-    cd scripts
-    pip install -r requirements.txt
-    ```
+The frontend will be available at `http://localhost:5173` and will proxy API requests to the backend at `http://localhost:3000`.
 
-2.  **Execute the Script:**
-    Run the script from within the `scripts` directory, providing your application username, password, and the path to your CSV file.
+### Running Tests
 
-    > **Note:** The script assumes the application is running and accessible at `http://localhost`. If you are running it from a different machine, you may need to edit the `API_URL` in `import_transactions.py`.
+```bash
+# Backend unit tests
+cd backend
+npm run test
 
-    ```bash
-    python import_transactions.py <your_username> <your_password> <path_to_your_csv_file>
-    ```
-    For example:
-    ```bash
-    python import_transactions.py myuser mypassword ../transactions.csv
-    ```
+# Backend e2e tests
+npm run test:e2e
 
-The script will log you in, and then go through the CSV file row by row to import each transaction.
+# Frontend tests (if configured)
+cd frontend
+npm run test
+```
+
+---
+
+## 📊 Analytics Features
+
+The application provides comprehensive analytics:
+
+- **Balance Over Time** - Track your net worth progression
+- **Monthly Summary** - Income vs. expenses comparison
+- **Category Breakdown** - See where your money goes
+- **Savings Goal Tracking** - Monitor progress toward your monthly savings target
+
+All analytics are calculated **client-side** after decryption, ensuring your financial patterns remain private.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 📝 License
+
+This project is open source. See the LICENSE file for details.
