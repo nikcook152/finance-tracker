@@ -34,8 +34,6 @@ services:
     image: postgres:15-alpine
     container_name: finance_db
     restart: always
-    ports:
-      - "5432:5432"
     env_file:
       - .env
     # Map the user's variable names to what the postgres image expects
