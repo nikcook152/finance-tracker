@@ -12,11 +12,13 @@ datasource db {
 
 // User model for authentication
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  passwordHash          String
+  failedLoginAttempts   Int      @default(0)
+  lockedUntil           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   transactions Transaction[]
   savingsGoals  SavingsGoal[]

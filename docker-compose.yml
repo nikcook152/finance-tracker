@@ -6,8 +6,7 @@ services:
     build: ./backend
     container_name: finance_api
     restart: always
-    ports:
-      - "3000:3000"
+    # Port not exposed externally - accessed via Nginx reverse proxy
     env_file:
       - .env
     # Construct DATABASE_URL from variables in the .env file
@@ -24,8 +23,7 @@ services:
     build: ./frontend
     container_name: finance_frontend
     restart: always
-    ports:
-      - "5173:5173"
+    # Port not exposed externally - accessed via Nginx reverse proxy
     networks:
       - default
 

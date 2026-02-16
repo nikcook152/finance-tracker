@@ -12,6 +12,9 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /usr/src/app
 
+# Create non-root user for security
+RUN addgroup -S app && adduser -S app -G app
+
 # --- IMPORTANT: The next three blocks are corrected ---
 
 # 1. Copy package files from the builder stage for consistency
@@ -29,5 +32,11 @@ COPY --from=builder /usr/src/app/dist ./dist
 # Copy the entrypoint script
 COPY docker-entrypoint.sh /usr/src/app/
 RUN chmod +x /usr/src/app/docker-entrypoint.sh
+
+# Change ownership to non-root user
+RUN chown -R app:app /usr/src/app
+
+# Switch to non-root user
+USER app
 
 ENTRYPOINT ["/usr/src/app/docker-entrypoint.sh"]

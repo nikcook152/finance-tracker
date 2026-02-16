@@ -11,6 +11,8 @@ export const createMockUser = (overrides = {}) => ({
   id: 'test-user-id',
   email: 'test@example.com',
   passwordHash: 'hashedpassword123',
+  failedLoginAttempts: 0,
+  lockedUntil: null,
   createdAt: new Date('2025-01-01'),
   updatedAt: new Date('2025-01-01'),
   ...overrides,

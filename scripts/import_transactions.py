@@ -19,22 +19,36 @@ If you need bulk import, consider:
 - Exporting from your old system and manually entering transactions
 
 See README.md for more details on the E2E encryption implementation.
+
+SECURITY NOTE:
+- API_URL should be set via environment variable
+- Credentials should be entered interactively or via environment variables
+- Avoid passing credentials as command-line arguments (visible in process list)
 """
 
 import csv
 import requests
-import argparse
+import os
+import getpass
 from datetime import datetime
+from dotenv import load_dotenv
 
-# Define the API endpoint
-API_URL = 'http://xxx/api'
+# Load environment variables from .env file if present
+load_dotenv()
 
-def login(username, password):
-    """Authenticate and get a JWT token."""
+# Get API URL from environment variable with fallback
+API_URL = os.environ.get('FINANCE_API_URL', 'http://localhost:8090/api')
+
+def login(session, username, password):
+    """Authenticate and get session with cookies."""
     try:
-        response = requests.post(f'{API_URL}/auth/login', json={'email': username, 'password': password})
+        response = session.post(
+            f'{API_URL}/auth/login', 
+            json={'email': username, 'password': password},
+            # Session cookies are automatically handled by requests.Session
+        )
         response.raise_for_status()
-        return response.json().get('accessToken')
+        return response.json()
     except requests.exceptions.RequestException as e:
         print(f"Error during login: {e}")
         return None
@@ -97,17 +111,40 @@ def import_transactions(token, file_path):
 
 
 if __name__ == '__main__':
+    import argparse
+    
     parser = argparse.ArgumentParser(description='Import transactions from a CSV file.')
-    parser.add_argument('username', help='Your application username')
-    parser.add_argument('password', help='Your application password')
     parser.add_argument('file_path', help='Path to the CSV file')
+    parser.add_argument('--username', '-u', help='Your application username (or set FINANCE_USERNAME env var)')
+    parser.add_argument('--password', '-p', help='Your application password (or set FINANCE_PASSWORD env var)')
+    parser.add_argument('--api-url', help='API URL (or set FINANCE_API_URL env var)')
 
     args = parser.parse_args()
 
-    print("Attempting to log in...")
-    auth_token = login(args.username, args.password)
+    # Get API URL from args or environment
+    if args.api_url:
+        API_URL = args.api_url
+    else:
+        API_URL = os.environ.get('FINANCE_API_URL', 'http://localhost:8090/api')
 
-    if auth_token:
+    # Get credentials from args, environment, or prompt
+    username = args.username or os.environ.get('FINANCE_USERNAME')
+    password = args.password or os.environ.get('FINANCE_PASSWORD')
+
+    if not username:
+        username = input("Enter username: ")
+    if not password:
+        password = getpass.getpass("Enter password: ")
+
+    # Create session for cookie management
+    session = requests.Session()
+
+    print(f"Attempting to log in to {API_URL}...")
+    result = login(session, username, password)
+
+    if result:
         print("Login successful. Starting import...")
-        import_transactions(auth_token, args.file_path)
+        import_transactions(session, args.file_path)
         print("Import process finished.")
+    else:
+        print("Login failed. Cannot proceed with import.")

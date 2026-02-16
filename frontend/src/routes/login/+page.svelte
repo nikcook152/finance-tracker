@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { authToken, encryptionKey, userEmail } from '$lib/stores/auth.store';
+  import { isAuthenticatedState, encryptionKey, userEmail } from '$lib/stores/auth.store';
   import { deriveKey, getOrCreateSalt } from '$lib/crypto';
 
   let email = '';
@@ -15,18 +15,20 @@
       const salt = getOrCreateSalt(email);
       const key = await deriveKey(password, salt);
       
-      // Login with the server
+      // Login with the server - cookies are set automatically
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: include cookies
         body: JSON.stringify({ email, password })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Store auth token and encryption key
-        authToken.set(data.accessToken);
+        // Store auth state and encryption key
+        // JWT is now stored in HttpOnly cookie - not accessible to JS
+        isAuthenticatedState.set(true);
         encryptionKey.set(key);
         userEmail.set(email);
         goto('/dashboard');

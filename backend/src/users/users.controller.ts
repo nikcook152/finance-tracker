@@ -15,6 +15,8 @@ import { GetUser } from 'src/auth/decorator/get-user.decorator';
 import type { User } from '@prisma/client';
 import { UsersService } from './users.service';
 import { SetSavingsGoalDto } from './dto/set-savings-goal.dto';
+import { UserResponseDto } from './dto/user-response.dto';
+
 // import { UpdateUserDto } from './dto/update-user.dto'; // This file does not exist
 // import { JwtAuthGuard } from '../auth/jwt-auth.guard'; // This file does not exist
 
@@ -24,8 +26,14 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
-  getMe(@GetUser() user: User) {
-    return user;
+  getMe(@GetUser() user: User): UserResponseDto {
+    // Explicitly select only safe fields to return
+    return {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 
   @Post('savings-goal')
