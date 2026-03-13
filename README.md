@@ -400,18 +400,77 @@ The Nginx configuration includes a prepared HTTPS server block (commented out). 
 
 ## 📥 Data Import
 
-> ⚠️ **Important:** The data import script is **not compatible with E2E encryption**. With encryption enabled, transaction data must be encrypted client-side before being sent to the API.
+The import script (`scripts/import_transactions.py`) supports End-to-End encryption. Transaction data is encrypted client-side using the same encryption parameters as the web interface before being sent to the API.
 
-### Options for Importing Transactions
+### Prerequisites
 
-1. **Use the Web Interface (Recommended)** - Encryption is handled automatically
-2. **Manual Entry** - Add transactions through the dashboard form
-3. **Modify the Import Script** - Implement Python encryption using the same parameters (PBKDF2, AES-GCM)
+Install the required Python dependencies:
+```bash
+pip install -r scripts/requirements.txt
+```
 
-For reference, the import script is located in `scripts/import_transactions.py` and supports:
-- Environment variable configuration (`FINANCE_API_URL`, `FINANCE_USERNAME`, `FINANCE_PASSWORD`)
-- Interactive credential prompts
-- CSV file parsing
+### CSV Format
+
+The import script expects a tab-separated CSV file with the following columns:
+```
+Date    Title   Amount Category    Expense/Income
+01.01.2024  Grocery Shopping  -50.00  Food   Expense
+15.01.2024  Salary Payment    3000.00 Income   INCOME
+```
+
+### Usage
+
+**Interactive mode (recommended for security):**
+```bash
+python scripts/import_transactions.py transactions.csv
+```
+
+**With command-line arguments:**
+```bash
+python scripts/import_transactions.py transactions.csv -u your@email.com -p yourpassword -e your@email.com
+```
+
+**Using environment variables:**
+```bash
+export FINANCE_API_URL=http://localhost:8090/api
+export FINANCE_USERNAME=your@email.com
+export FINANCE_PASSWORD=yourpassword
+export FINANCE_EMAIL=your@email.com
+python scripts/import_transactions.py transactions.csv
+```
+
+### Important: Salt Management
+
+For imported transactions to be readable by the web interface, you must use the **same encryption salt** that was created when you first logged in through the browser.
+
+**Retrieving your existing salt:**
+1. Open your browser's DevTools (F12)
+2. Go to the **Application** tab → **Local Storage**
+3. Find the key `finance_tracker_salt_<your_email>`
+4. Copy the value and set it via the `FINANCE_SALT` environment variable:
+
+```bash
+export FINANCE_SALT=<copied_salt_value>
+python scripts/import_transactions.py transactions.csv
+```
+
+If you don't set `FINANCE_SALT`, a new salt will be generated. Transactions imported with a new salt will NOT be readable in the web interface (you'll see decryption errors), but they will be stored correctly in the database.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `FINANCE_API_URL` | API URL (default: `http://localhost:8090/api`) |
+| `FINANCE_USERNAME` | Your login email |
+| `FINANCE_PASSWORD` | Your password |
+| `FINANCE_EMAIL` | Your email (for salt derivation) |
+| `FINANCE_SALT` | Base64-encoded salt (optional, for existing users) |
+
+### Security Note
+
+- Credentials passed via command-line arguments may be visible in the process list
+- Use interactive mode or environment variables for better security
+- The encryption key is derived from your password using PBKDF2 (100,000 iterations) - same as the web interface
 
 ---
 
