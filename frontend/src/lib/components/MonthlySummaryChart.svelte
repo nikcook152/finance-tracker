@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Chart, registerables } from 'chart.js';
-  import { authToken, encryptionKey } from '$lib/stores/auth.store';
+  import { isAuthenticated, encryptionKey } from '$lib/stores/auth.store';
   import { decryptTransaction } from '$lib/crypto';
   import { browser } from '$app/environment';
   import { goto } from '$app/navigation';
@@ -22,23 +22,21 @@
   onMount(async () => {
     if (!browser) return;
 
-    const token = $authToken;
     const key = $encryptionKey;
-    if (!token || !key) {
+    if (!$isAuthenticated || !key) {
       goto('/login');
       return;
     }
 
     try {
-      // Fetch all transactions
-      const response = await fetch('/api/transactions', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      // Fetch all transactions for analytics
+      const response = await fetch('/api/transactions?limit=10000', {
+        credentials: 'include'
       });
 
       if (response.ok) {
-        const transactions: Transaction[] = await response.json();
+        const data = await response.json();
+        const transactions: Transaction[] = data.transactions || data;
         
         // Decrypt all transactions
         const decryptedTransactions = await Promise.all(
@@ -68,13 +66,13 @@
         }
 
         const months = Object.keys(monthlyData).sort();
-        const data = months.map((month) => ({
+        const monthlySummary = months.map((month) => ({
           month,
           net: monthlyData[month].income - monthlyData[month].expense,
         }));
 
-        const labels = data.map((d) => d.month);
-        const values = data.map((d) => d.net);
+        const labels = monthlySummary.map((d) => d.month);
+        const values = monthlySummary.map((d) => d.net);
 
         const positiveData = values.map((v) => (v >= 0 ? v : null));
         const negativeData = values.map((v) => (v < 0 ? v : null));

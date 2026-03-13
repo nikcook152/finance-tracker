@@ -1,4 +1,4 @@
-import { Controller, UseGuards, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, UseGuards, Get, Post, Body, Patch, Param, Delete, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from 'src/auth/decorator/get-user.decorator';
 import { TransactionsService } from './transactions.service';
@@ -12,8 +12,14 @@ export class TransactionsController {
   constructor(private transactionsService: TransactionsService) {}
 
   @Get()
-  getTransactions(@GetUser() user: User) {
-    return this.transactionsService.getTransactions(user);
+  getTransactions(
+    @GetUser() user: User,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 25;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.transactionsService.getTransactions(user, parsedLimit, parsedOffset);
   }
 
   @Post()

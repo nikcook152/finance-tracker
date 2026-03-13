@@ -8,13 +8,31 @@ import { User } from '@prisma/client';
 export class TransactionsService {
   constructor(private prisma: PrismaService) {}
 
-  // Get all transactions for a specific user
-  getTransactions(user: User) {
-    return this.prisma.transaction.findMany({
-      where: {
-        userId: user.id,
-      },
-    });
+  // Get transactions for a specific user with pagination
+  async getTransactions(user: User, limit: number = 25, offset: number = 0) {
+    const [transactions, totalCount] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: {
+          userId: user.id,
+        },
+        orderBy: {
+          date: 'desc',
+        },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.transaction.count({
+        where: {
+          userId: user.id,
+        },
+      }),
+    ]);
+
+    return {
+      transactions,
+      totalCount,
+      hasMore: offset + transactions.length < totalCount,
+    };
   }
 
   // Create a new transaction for a specific user

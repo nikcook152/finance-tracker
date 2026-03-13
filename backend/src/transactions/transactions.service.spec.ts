@@ -29,7 +29,7 @@ describe('TransactionsService', () => {
   });
 
   describe('getTransactions', () => {
-    it('should return all transactions for a user', async () => {
+    it('should return paginated transactions for a user', async () => {
       const mockUser = createMockUser();
       const mockTransactions = [
         createMockTransaction({ userId: mockUser.id }),
@@ -41,23 +41,50 @@ describe('TransactionsService', () => {
       ];
 
       prismaMock.transaction.findMany.mockResolvedValue(mockTransactions);
+      prismaMock.transaction.count.mockResolvedValue(2);
 
-      const result = await service.getTransactions(mockUser as any);
+      const result = await service.getTransactions(mockUser as any, 25, 0);
 
       expect(prismaMock.transaction.findMany).toHaveBeenCalledWith({
         where: { userId: mockUser.id },
+        orderBy: { date: 'desc' },
+        take: 25,
+        skip: 0,
       });
-      expect(result).toHaveLength(2);
-      expect(result).toEqual(mockTransactions);
+      expect(result.transactions).toHaveLength(2);
+      expect(result.totalCount).toBe(2);
+      expect(result.hasMore).toBe(false);
     });
 
-    it('should return empty array if no transactions exist', async () => {
+    it('should return hasMore true when there are more transactions', async () => {
+      const mockUser = createMockUser();
+      const mockTransactions = [
+        createMockTransaction({ userId: mockUser.id }),
+        createMockTransaction({
+          id: 'transaction-2',
+          type: 'INCOME',
+          userId: mockUser.id,
+        }),
+      ];
+
+      prismaMock.transaction.findMany.mockResolvedValue(mockTransactions);
+      prismaMock.transaction.count.mockResolvedValue(30);
+
+      const result = await service.getTransactions(mockUser as any, 25, 0);
+
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should return empty result if no transactions exist', async () => {
       const mockUser = createMockUser();
       prismaMock.transaction.findMany.mockResolvedValue([]);
+      prismaMock.transaction.count.mockResolvedValue(0);
 
-      const result = await service.getTransactions(mockUser as any);
+      const result = await service.getTransactions(mockUser as any, 25, 0);
 
-      expect(result).toEqual([]);
+      expect(result.transactions).toEqual([]);
+      expect(result.totalCount).toBe(0);
+      expect(result.hasMore).toBe(false);
     });
   });
 

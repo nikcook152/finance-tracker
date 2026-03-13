@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { authToken, encryptionKey } from '$lib/stores/auth.store';
+  import { isAuthenticated, encryptionKey } from '$lib/stores/auth.store';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { formatCurrency, formatDate } from '$lib/formatters';
@@ -34,7 +34,11 @@
   let transactions: Transaction[] = [];
   let analytics: AnalyticsData | null = null;
   let isLoading = true;
+  let isLoadingMore = false;
   let apiError = '';
+  let offset = 0;
+  let hasMore = true;
+  const limit = 25;
 
   let newTransaction = {
     title: '',
@@ -102,37 +106,71 @@
   }
 
   // --- DATA FETCHING ---
+  async function fetchTransactions(reset: boolean = false) {
+    const key = $encryptionKey;
+    if (!$isAuthenticated || !key) return;
+
+    const currentOffset = reset ? 0 : offset;
+    
+    try {
+      // Fetch transactions with pagination
+      const url = `/api/transactions?limit=${limit}&offset=${currentOffset}`;
+      const transactionsRes = await fetch(url, {
+        credentials: 'include'
+      });
+
+      if (transactionsRes.ok) {
+        const data = await transactionsRes.json();
+        const rawTransactions = data.transactions || data;
+        hasMore = data.hasMore !== undefined ? data.hasMore : rawTransactions.length === limit;
+        
+        // Decrypt transactions
+        const decryptedTransactions = await Promise.all(
+          rawTransactions.map((t: Transaction) => decryptTransactionData(t, key))
+        );
+
+        if (reset) {
+          transactions = decryptedTransactions;
+          offset = limit;
+        } else {
+          // Append new transactions, avoiding duplicates
+          const existingIds = new Set(transactions.map(t => t.id));
+          const newTransactions = decryptedTransactions.filter(t => !existingIds.has(t.id));
+          transactions = [...transactions, ...newTransactions];
+          offset += limit;
+        }
+
+        // Calculate analytics from ALL transactions for accurate data
+        analytics = calculateAnalytics(transactions);
+      } else {
+        apiError = 'Failed to fetch transactions.';
+      }
+    } catch (error) {
+      apiError = 'Could not connect to the server.';
+    }
+  }
+
+  async function loadMoreTransactions() {
+    isLoadingMore = true;
+    await fetchTransactions(false);
+    isLoadingMore = false;
+  }
+
   onMount(async () => {
-    const token = $authToken;
     const key = $encryptionKey;
     
-    if (!token || !key) {
+    if (!$isAuthenticated || !key) {
       goto('/login');
       return;
     }
 
     isLoading = true;
     try {
-      // Fetch transactions
-      const transactionsRes = await fetch(`/api/transactions`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (transactionsRes.ok) {
-        const rawTransactions = await transactionsRes.json();
-        // Decrypt all transactions
-        transactions = await Promise.all(
-          rawTransactions.map((t: Transaction) => decryptTransactionData(t, key))
-        );
-        // Calculate analytics client-side
-        analytics = calculateAnalytics(transactions);
-      } else {
-        apiError = 'Failed to fetch transactions.';
-      }
+      await fetchTransactions(true);
 
       // Fetch savings goal from API
       const analyticsRes = await fetch(`/api/analytics`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (analyticsRes.ok) {
@@ -152,9 +190,8 @@
 
   // --- API FUNCTIONS ---
   async function handleAddTransaction() {
-    const token = $authToken;
     const key = $encryptionKey;
-    if (!token || !key || !newTransaction.amount) return;
+    if (!$isAuthenticated || !key || !newTransaction.amount) return;
     apiError = '';
 
     try {
@@ -171,9 +208,9 @@
       const response = await fetch(`/api/transactions`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           encryptedData: encrypted.ciphertext,
           iv: encrypted.iv,
@@ -212,9 +249,8 @@
 
   async function handleUpdateTransaction() {
     if (!transactionToEdit || transactionToEdit.amount === undefined) return;
-    const token = $authToken;
     const key = $encryptionKey;
-    if (!token || !key) return;
+    if (!$isAuthenticated || !key) return;
     
     try {
       // Encrypt the updated data
@@ -229,7 +265,8 @@
 
       const response = await fetch(`/api/transactions/${transactionToEdit.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           encryptedData: encrypted.ciphertext,
           iv: encrypted.iv,
@@ -255,12 +292,11 @@
 
   async function handleDelete(transactionId: string) {
     if (!confirm('Are you sure you want to delete this transaction?')) return;
-    const token = $authToken;
 
     try {
       const response = await fetch(`/api/transactions/${transactionId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (response.ok) {
@@ -275,15 +311,11 @@
   }
 
   async function fetchAnalytics() {
-    const token = $authToken;
-    const key = $encryptionKey;
-    if (!token || !key) return;
-    
     // Recalculate analytics from decrypted transactions
     analytics = calculateAnalytics(transactions);
     
     // Fetch savings goal from API
-    const res = await fetch(`/api/analytics`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(`/api/analytics`, { credentials: 'include' });
     if (res.ok) {
       const apiAnalytics = await res.json();
       if (analytics) {
@@ -366,6 +398,18 @@
         </li>
       {/each}
     </ul>
+    
+    {#if hasMore}
+      <div class="load-more-container">
+        <button 
+          class="load-more-btn" 
+          on:click={loadMoreTransactions} 
+          disabled={isLoadingMore}
+        >
+          {isLoadingMore ? 'Loading...' : 'Load More Transactions'}
+        </button>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -397,5 +441,34 @@
 
   @media (max-width: 600px) {
     .actions { display: flex; gap: 0.5rem; } /* Always show buttons on mobile */
+  }
+
+  /* Load More Button */
+  .load-more-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .load-more-btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .load-more-btn:hover:not(:disabled) {
+    background-color: var(--primary-hover-color, #2563eb);
+  }
+
+  .load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>
