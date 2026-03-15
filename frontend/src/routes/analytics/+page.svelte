@@ -2,10 +2,13 @@
   import BalanceChart from '$lib/components/BalanceChart.svelte';
   import MonthlySummaryChart from '$lib/components/MonthlySummaryChart.svelte';
   import CategoryExpensesChart from '$lib/components/CategoryExpensesChart.svelte';
+  import TimeRangeSelector from '$lib/components/TimeRangeSelector.svelte';
 </script>
 
 <div class="container mx-auto p-4">
   <h1 class="text-2xl font-bold mb-4">Analytics</h1>
+
+  <TimeRangeSelector />
 
   <div style="height: 32rem; margin-bottom: 2rem;">
     <BalanceChart />

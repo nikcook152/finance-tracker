@@ -121,15 +121,55 @@ def encrypt_transaction_data(title: str, amount: float, category: str, key: byte
 # Authentication & Import Functions
 # ============================================================
 
+# Request timeout in seconds
+REQUEST_TIMEOUT = 10
+
+
+def test_connection():
+    """Test if the server is reachable before attempting login."""
+    try:
+        # Try to reach the API root or health endpoint
+        response = requests.get(
+            f'{API_URL}/auth',  # Just any endpoint to test connectivity
+            timeout=5,
+        )
+        return True
+    except requests.exceptions.Timeout:
+        print(f"Connection test timed out - server may be slow to respond")
+        return True  # Give it a chance anyway
+    except requests.exceptions.ConnectionError:
+        print(f"Cannot reach server at {API_URL}")
+        return False
+    except Exception:
+        return True  # Assume it's fine if we get any other response
+
+
 def login(session, username, password):
     """Authenticate and get session with cookies."""
     try:
         response = session.post(
             f'{API_URL}/auth/login', 
             json={'email': username, 'password': password},
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         return response.json()
+    except requests.exceptions.Timeout:
+        print(f"Error during login: Connection timed out after {REQUEST_TIMEOUT} seconds")
+        print(f"Server at {API_URL} may be unreachable or not running")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        print(f"Error during login: Could not connect to {API_URL}")
+        print(f"Connection error: {e}")
+        return None
+    except requests.exceptions.HTTPError as e:
+        print(f"Error during login: HTTP {e.response.status_code}")
+        try:
+            error_body = e.response.json()
+            print(f"Server response: {error_body}")
+        except Exception:
+            print(f"Response body: {e.response.text[:200]}")
+        return None
     except requests.exceptions.RequestException as e:
         print(f"Error during login: {e}")
         return None
@@ -246,10 +286,11 @@ def import_transactions(session, file_path, email, password):
                     'type': transaction_type
                 }
                 
-                # Send to API
+                # Send to API with timeout
                 response = session.post(
                     f'{API_URL}/transactions',
-                    json=transaction_payload
+                    json=transaction_payload,
+                    timeout=REQUEST_TIMEOUT,
                 )
                 response.raise_for_status()
                 
@@ -323,6 +364,16 @@ If you get decryption errors, your salt may be different - check FINANCE_SALT en
 
     # Create session for cookie management
     session = requests.Session()
+
+    # Test connection first
+    print(f"Testing connection to {API_URL}...")
+    if not test_connection():
+        print("Server is unreachable. Please check:")
+        print("  1. Is the server running?")
+        print("  2. Is the API_URL correct?")
+        print("  3. Is there a network/firewall issue?")
+        exit(1)
+    print("Connection successful.")
 
     print(f"Attempting to log in to {API_URL}...")
     result = login(session, username, password)
