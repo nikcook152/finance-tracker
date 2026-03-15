@@ -387,6 +387,92 @@ git pull
 docker compose up --build -d
 ```
 
+### Installation on openSUSE MicroOS Server
+
+This guide covers the deployment of the Finance Tracker on an openSUSE MicroOS server using Podman (a daemonless container runtime). MicroOS uses `transactional-update` for system changes, which requires a different approach than traditional Linux distributions.
+
+#### Installing Prerequisites
+
+MicroOS requires using `transactional-update` to install packages that persist across updates. Install the required software:
+
+```bash
+transactional-update pkg install podman podman-compose firewalld git
+```
+
+After installation, reboot the system to activate the new packages:
+```bash
+reboot
+```
+
+#### Configuring the Firewall
+
+Enable and start firewalld, then open port 8090 for the application:
+
+```bash
+# Enable and start firewalld
+systemctl enable --now firewalld
+
+# Open port 8090 for web traffic
+firewall-cmd --permanent --add-port=8090/tcp
+firewall-cmd --reload
+
+# Verify the port is open
+firewall-cmd --list-ports
+```
+
+#### Deploying the Application
+
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/nikcook152/finance-tracker.git
+   cd finance-tracker
+   ```
+
+2. **Create Environment File**
+   ```bash
+   cp env.example .env
+   ```
+
+   Edit the `.env` file with your configuration:
+   ```bash
+   # Database Credentials
+   DB_USER=your_db_user
+   DB_PASSWORD=your_secure_password
+   DB_NAME=finance_tracker
+   
+   # JWT Secret Key
+   JWT_SECRET=your_256_bit_random_secret_key
+   
+   # CORS Allowed Origins
+   CORS_ORIGIN=https://yourdomain.com
+   ```
+
+3. **Build and Launch**
+   ```bash
+   podman-compose up --build -d
+   ```
+
+Your application is now running! Access it at `http://<your_server_ip>:8090`.
+
+#### Future Deployments on MicroOS
+
+To deploy updates:
+```bash
+git pull
+podman-compose down
+podman-compose up --build -d
+```
+
+#### Rollback Capability
+
+MicroOS integrates with Snapper for automatic system snapshots. If a deployment causes issues, you can rollback to a previous state using:
+```bash
+snapper list
+snapper rollback <snapshot_number>
+```
+
+This provides an additional layer of safety when updating your deployment.
+
 ### HTTPS Configuration (Recommended for Production)
 
 The Nginx configuration includes a prepared HTTPS server block (commented out). To enable HTTPS:
