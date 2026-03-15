@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { authToken } from '$lib/stores/auth.store';
+  import { isAuthenticated, authApi } from '$lib/stores/auth.store';
 </script>
 
 <header>
   <nav>
     <a href="/" class="logo">FinanceTracker</a>
     <div class="nav-links">
-      {#if $authToken}
+      {#if $isAuthenticated}
         <a href="/dashboard">Dashboard</a>
         <a href="/analytics">Analytics</a>
-        <a href="/login" on:click={() => authToken.set(null)}>Logout</a>
+        <button on:click={() => authApi.logout()}>Logout</button>
       {:else}
         <a href="/login">Login</a>
         <a href="/register">Register</a>

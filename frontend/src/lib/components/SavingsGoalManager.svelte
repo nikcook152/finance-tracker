@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
-  import { authToken } from '$lib/stores/auth.store';
+  import { isAuthenticated } from '$lib/stores/auth.store';
 
   export let currentGoal: number = 0;
 
@@ -18,11 +18,11 @@
   async function handleUpdateGoal() {
     isLoading = true;
     message = '';
-    const token = $authToken;
 
     const response = await fetch(`/api/users/savings-goal`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ amount: Number(newGoalAmount) })
     });
 
